@@ -1,3 +1,30 @@
+/**
+ * MIT License
+ *
+ * Copyright (c) 2024 Vladimir Abramov <abramov7613@yandex.ru>
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 #include "oxc.h"
 #include <iostream>
 #include <map>
@@ -7,15 +34,54 @@
 #include <algorithm>
 #include <stdexcept>
 #include <limits>
+#include <boost/multiprecision/cpp_int.hpp>
 
 namespace oxc {
 
 using ShortDate = std::pair<int8_t, int8_t> ; //first = month, second = day
 using ApEvReads = OrthodoxCalendar::ApostolEvangelieReadings ;
+using uint256_t = boost::multiprecision::uint256_t ;
+
 ShortDate pasha_calc(int year)
 {
 	auto [y, m, d] = OrthodoxCalendar::pascha(year);
 	return {m, d};
+}
+
+uint256_t jdn_for_date(int y, int8_t m, int8_t d, bool julian=true)
+{
+	if(y<1) return 0;
+	if(julian) {
+		uint64_t a = (14 - m) / 12;
+		uint64_t b = y + 4800 - a;
+		uint64_t c = m + 12 * a - 3;
+		uint64_t x1 = (153 * c + 2) / 5;
+		uint64_t x2 = b / 4;
+		uint256_t res {b};
+		res *= 365;
+		res += d;
+		res += x1;
+		res += x2;
+		res -= 32083;
+		return res;
+	} else {
+		uint64_t a = (14 - m) / 12;
+		uint64_t b = y + 4800 - a;
+		uint64_t c = m + 12 * a - 3;
+		uint64_t x1 = (153 * c + 2) / 5;
+		uint64_t x2 = b / 4;
+		uint64_t x3 = b / 100;
+		uint64_t x4 = b / 400;
+		uint256_t res {b};
+		res *= 365;
+		res += d;
+		res += x1;
+		res += x2;
+		res -= x3;
+		res += x4;
+		res -= 32045;
+		return res;
+	}
 }
 
 /*----------------------------------------------*/
@@ -3334,70 +3400,51 @@ int8_t OrthodoxCalendar::month_length(int8_t month, bool leap)
 	return k;
 }
 
-uint64_t OrthodoxCalendar::jdn_for_date(int y, int8_t m, int8_t d, bool julian)
-{
-	if(y<1) return 0;
-	if(julian) {
-		uint64_t a = (14 - m) / 12;
-		uint64_t b = y + 4800 - a;
-		uint64_t c = m + 12 * a - 3;
-		uint64_t x1 = (153 * c + 2) / 5;
-		uint64_t x2 = b / 4;
-		return (d + x1 + 365 * b + x2 - 32083);
-	} else {
-		uint64_t a = (14 - m) / 12;
-		uint64_t b = y + 4800 - a;
-		uint64_t c = m + 12 * a - 3;
-		uint64_t x1 = (153 * c + 2) / 5;
-		uint64_t x2 = b / 4;
-		uint64_t x3 = b / 100;
-		uint64_t x4 = b / 400;
-		return (d + x1 + 365 * b + x2 - x3 + x4 - 32045);
-	}
-}
-
-uint64_t OrthodoxCalendar::jdn_for_date(year_month_day d, bool julian)
-{
-	return jdn_for_date(d.year, d.month, d.day, julian);
-}
-
 year_month_day OrthodoxCalendar::grigorian_to_julian(int y, int8_t m, int8_t d)
 {
-  uint64_t a = 32082 + jdn_for_date(y, m, d, false);
-  uint64_t b = (4*a + 3) / 1461;
-  uint64_t c = (1461*b) / 4 ;
+  uint256_t a = uint256_t(32082) + jdn_for_date(y, m, d, false);
+  uint256_t b = (uint256_t(4)*a + uint256_t(3)) / uint256_t(1461);
+  uint256_t c = (uint256_t(1461)*b) / uint256_t(4) ;
   c = a - c;
-  uint64_t x1 = (5*c + 2) / 153;
-  d = (153*x1 + 2) / 5;
-  d = c - d + 1;
-  y = m = x1 / 10;
-  m = x1 + 3 - 12*m;
-  y = b - 4800 + y;
+  uint256_t x1 = (uint256_t(5)*c + uint256_t(2)) / uint256_t(153);
+  uint256_t x2 = (uint256_t(153)*x1 + uint256_t(2)) / uint256_t(5);
+  x2 = c - x2 + 1;
+  d = static_cast<int8_t>(x2);
+  uint256_t x3 = x1 / uint256_t(10);
+  uint256_t x4 = x1 + uint256_t(3) - uint256_t(12)*x3;
+  m = static_cast<int8_t>(x4);
+  uint256_t x5 = b - uint256_t(4800) + x3;
+  y = static_cast<int>(x5);
   return {y, m, d};
 }
 
 year_month_day OrthodoxCalendar::julian_to_grigorian(int y, int8_t m, int8_t d)
 {
-  uint64_t a = 32044 + jdn_for_date(y, m, d);
-  uint64_t b = (4*a + 3) / 146097;
-  uint64_t c = (146097*b) / 4 ;
+  uint256_t a = uint256_t(32044) + jdn_for_date(y, m, d);
+  uint256_t b = (uint256_t(4)*a + uint256_t(3)) / uint256_t(146097);
+  uint256_t c = (uint256_t(146097)*b) / uint256_t(4) ;
   c = a - c;
-  uint64_t x1 = (4*c + 3) / 1461;
-  uint64_t x2 = (1461*x1) / 4;
+  uint256_t x1 = (uint256_t(4)*c + uint256_t(3)) / uint256_t(1461);
+  uint256_t x2 = (uint256_t(1461)*x1) / uint256_t(4);
   x2 = c - x2;
-  uint64_t x3 = (5*x2 + 2) / 153;
-  d = (153*x3 +2) / 5;
-  d = x2 - d + 1;
-  y = m = x3 / 10;
-  m = x3 + 3 - 12*m;
-  y = 100*b + x1 - 4800 + y;
+  uint256_t x3 = (uint256_t(5)*x2 + uint256_t(2)) / uint256_t(153);
+  uint256_t x4 = (uint256_t(153)*x3 + uint256_t(2)) / uint256_t(5);
+  x4 = x2 - x4 + 1;
+  d = static_cast<int8_t>(x4);
+  uint256_t x5 = x3 / uint256_t(10);
+  uint256_t x6 = x3 + uint256_t(3) - x5*uint256_t(12);
+  m = static_cast<int8_t>(x6);
+  uint256_t x7 = b*uint256_t(100) + x1 - uint256_t(4800) + x5;
+  y = static_cast<int>(x7);
   return {y, m, d};
 }
 
 int8_t OrthodoxCalendar::weekday_for_date(int y, int8_t m, int8_t d, bool julian)
 { // return: 0-вс, 1-пн, 2-вт, 3-ср, 4-чт, 5-пт, 6-сб.
 	if(y<1) return -1;
-	switch(jdn_for_date(y, m, d, julian) % 7) {
+	uint256_t jdn = jdn_for_date(y, m, d, julian), q, r;
+	boost::multiprecision::divide_qr(jdn, uint256_t(7), q, r);
+	switch(static_cast<int>(r)) {
 		case 0: { return 1; }
 		case 1: { return 2; }
 		case 2: { return 3; }
