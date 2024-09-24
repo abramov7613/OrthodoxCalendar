@@ -1,4 +1,4 @@
-/**
+/*
  * MIT License
  *
  * Copyright (c) 2024 Vladimir Abramov <abramov7613@yandex.ru>
@@ -39,7 +39,7 @@ namespace oxc {
 /**
  * \defgroup block1 группа констант 1 - переходящие дни года
  *
- * константы памятных дат делятся на группы по диапазонам 0-999; 1000-1999; 2000-2999 и т.д. при условии, что одна дата не может иметь больше одного признака из каждой группы констант.
+ * константы памятных дат делятся на группы по диапазонам 0001-1000; 1001-2000; 2001-3000 и т.д. при условии, что только один признак из каждой группы может соответствовать одной дате
  *
  * @{
  *
@@ -183,7 +183,7 @@ const uint16_t vel_post_d6n7      = 134 ;///< Страстна́я седмиц�
 /**
  * \defgroup block2 группа констант 2 - непереходящие дни года
  *
- * константы памятных дат делятся на группы по диапазонам 0-999; 1000-1999; 2000-2999 и т.д. при условии, что одна дата не может иметь больше одного признака из каждой группы констант.
+ * константы памятных дат делятся на группы по диапазонам 0001-1000; 1001-2000; 2001-3000 и т.д. при условии, что только один признак из каждой группы может соответствовать одной дате
  *
  * @{
  *
@@ -268,7 +268,7 @@ const uint16_t m12d31 = 1075  ;///< 31 декабря. Отдание празд
 /**
  * \defgroup block3 группа констант 3 - другие дни года
  *
- * константы памятных дат делятся на группы по диапазонам 0-999; 1000-1999; 2000-2999 и т.д. при условии, что одна дата не может иметь больше одного признака из каждой группы констант.
+ * константы памятных дат делятся на группы по диапазонам 0001-1000; 1001-2000; 2001-3000 и т.д. при условии, что только один признак из каждой группы может соответствовать одной дате
  *
  * @{
  *
@@ -308,7 +308,7 @@ const uint16_t ned_pered18avg         = 2025  ;///< Собор Кемеровс�
 /**
  * \defgroup block4 группа констант 4 - признаки принадлежности даты к множеству (по праздникам)
  *
- * константы памятных дат делятся на группы по диапазонам 0-999; 1000-1999; 2000-2999 и т.д. при условии, что одна дата не может иметь больше одного признака из каждой группы констант.
+ * константы памятных дат делятся на группы по диапазонам 0001-1000; 1001-2000; 2001-3000 и т.д. при условии, что только один признак из каждой группы может соответствовать одной дате
  *
  * @{
  *
@@ -321,7 +321,7 @@ const uint16_t vel_prazd             = 3003; ///< Великие праздни�
 /**
  * \defgroup block5 группа констант 5 - признаки принадлежности даты к множеству (по многодневным постам и сплошным седмицам)
  *
- * константы памятных дат делятся на группы по диапазонам 0-999; 1000-1999; 2000-2999 и т.д. при условии, что одна дата не может иметь больше одного признака из каждой группы констант.
+ * константы памятных дат делятся на группы по диапазонам 0001-1000; 1001-2000; 2001-3000 и т.д. при условии, что только один признак из каждой группы может соответствовать одной дате
  *
  * @{
  *
@@ -338,18 +338,25 @@ const uint16_t full7_troica     = 4009;///< Сплошная седмица. Т�
 /** @} */
 
 struct year_month_day {
-	int year{};
-	int8_t month{};
-	int8_t day{};
+	std::string year;
+	int8_t month;
+	int8_t day;
+	year_month_day() : year{}, month{}, day{} {}
+	year_month_day(std::string y, int8_t m, int8_t d);
+	year_month_day(unsigned long long y, int8_t m, int8_t d);
+	bool operator==(const year_month_day&) const;
+	bool operator!=(const year_month_day&) const;
+	bool operator<(const year_month_day&) const;
+	bool operator>(const year_month_day&) const;
 };
 
 class OrthodoxCalendar {
 	class impl;
 	std::unique_ptr<impl> pimpl;
 public:
-	///структура для определения евангельских / апостольских чтений
+	//структура для определения евангельских / апостольских чтений
 	struct ApostolEvangelieReadings {
-		uint16_t n{};		     ///< номер зачала
+		uint16_t n{};		     ///< старшие 4 бита определяют книгу : 1=`апостол`, 2=`от матфея`, 3=`от марка`, 4=`от луки`, 5=`от иоанна`. младшие 12 бит - номер зачала.
 		std::string_view c;  ///< комментарий зачала
 	};
 	OrthodoxCalendar();
@@ -358,36 +365,38 @@ public:
 	OrthodoxCalendar(OrthodoxCalendar&&);
 	OrthodoxCalendar& operator=(OrthodoxCalendar&&);
 	~OrthodoxCalendar();
-	static year_month_day pascha(int year, bool julian=true);
-	static bool is_leap_year(int y, bool julian=true);
-	static int8_t month_length(int8_t month, bool leap);
-	static year_month_day grigorian_to_julian(int y, int8_t m, int8_t d);
-	static year_month_day julian_to_grigorian(int y, int8_t m, int8_t d);
-	static int8_t weekday_for_date(int y, int8_t m, int8_t d, bool julian=true);
-	void set_cache_size(size_t sz);
-	void set_winter_indent_weeks_1(uint8_t w1);
-	void set_winter_indent_weeks_2(uint8_t w1, uint8_t w2);
-	void set_winter_indent_weeks_3(uint8_t w1, uint8_t w2, uint8_t w3);
-	void set_winter_indent_weeks_4(uint8_t w1, uint8_t w2, uint8_t w3, uint8_t w4);
-	void set_winter_indent_weeks_5(uint8_t w1, uint8_t w2, uint8_t w3, uint8_t w4, uint8_t w5);
-	void set_spring_indent_weeks(uint8_t w1, uint8_t w2);
-	void set_spring_indent_apostol(bool value);
-	int8_t winter_indent(int year);
-	int8_t spring_indent(int year);
-	int8_t apostol_post_length(int year);
-	int8_t date_glas(int y, int8_t m, int8_t d, bool julian=true);
-	int8_t date_n50(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<std::vector<uint16_t>> date_properties(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<ApostolEvangelieReadings> date_apostol(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<ApostolEvangelieReadings> date_evangelie(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<ApostolEvangelieReadings> resurrect_evangelie(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<year_month_day> get_date_with(int year, uint16_t property, bool julian=true);
-	std::optional<std::vector<year_month_day>> get_alldates_with(int year, uint16_t property, bool julian=true);
-	std::optional<year_month_day> get_date_withanyof(int year, std::span<uint16_t> properties, bool julian=true);
-	std::optional<year_month_day> get_date_withallof(int year, std::span<uint16_t> properties, bool julian=true);
-	std::optional<std::vector<year_month_day>> get_alldates_withanyof(int year, std::span<uint16_t> properties, bool julian=true);
-	std::string get_description_for_date(int year, int8_t month, int8_t day, bool julian=true);
-	std::string get_description_for_dates(std::span<year_month_day> days, bool julian=true, const std::string separator="\n");
+	static bool is_leap_year(const std::string& y, const bool julian=true);
+	static int8_t month_length(const int8_t month, const bool leap);
+	bool set_winter_indent_weeks_1(const uint8_t w1);
+	bool set_winter_indent_weeks_2(const uint8_t w1, const uint8_t w2);
+	bool set_winter_indent_weeks_3(const uint8_t w1, const uint8_t w2, const uint8_t w3);
+	bool set_winter_indent_weeks_4(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4);
+	bool set_winter_indent_weeks_5(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4, const uint8_t w5);
+	bool set_spring_indent_weeks(const uint8_t w1, const uint8_t w2);
+	void set_spring_indent_apostol(const bool value);
+	std::pair<std::vector<uint8_t>, bool> get_options() const;
+	std::pair<int8_t, int8_t> julian_pascha(const std::string& year) const;
+	year_month_day pascha(const std::string& year, const bool julian=true) const;
+	std::string jdn_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	year_month_day grigorian_to_julian(const std::string& y, const int8_t m, const int8_t d) const;
+	year_month_day julian_to_grigorian(const std::string& y, const int8_t m, const int8_t d) const;
+	int8_t winter_indent(const std::string& year) const;
+	int8_t spring_indent(const std::string& year) const;
+	int8_t apostol_post_length(const std::string& year) const;
+	int8_t date_glas(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	int8_t date_n50(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	int8_t weekday_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<std::vector<uint16_t>> date_properties(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<ApostolEvangelieReadings> date_apostol(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<ApostolEvangelieReadings> date_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<ApostolEvangelieReadings> resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<year_month_day> get_date_with(const std::string& year, const uint16_t property, const bool julian=true) const;
+	std::optional<std::vector<year_month_day>> get_alldates_with(const std::string& year, const uint16_t property, const bool julian=true) const;
+	std::optional<year_month_day> get_date_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
+	std::optional<year_month_day> get_date_withallof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
+	std::optional<std::vector<year_month_day>> get_alldates_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
+	std::string get_description_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::string get_description_for_dates(std::span<const year_month_day> days, const bool julian=true, const std::string separator="\n") const;
 };
 
 }// namespace oxc

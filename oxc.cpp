@@ -1,4 +1,4 @@
-/**
+/*
  * MIT License
  *
  * Copyright (c) 2024 Vladimir Abramov <abramov7613@yandex.ru>
@@ -26,69 +26,164 @@
  */
 
 #include "oxc.h"
-#include <iostream>
 #include <map>
 #include <set>
 #include <array>
 #include <queue>
 #include <algorithm>
+#include <unordered_map>
 #include <stdexcept>
 #include <limits>
 #include <boost/multiprecision/cpp_int.hpp>
 
 namespace oxc {
 
+/*----------------------------------------------*/
+/*                   TYPE ALIAS                 */
+/*----------------------------------------------*/
+
 using ShortDate = std::pair<int8_t, int8_t> ; //first = month, second = day
 using ApEvReads = OrthodoxCalendar::ApostolEvangelieReadings ;
-using uint256_t = boost::multiprecision::uint256_t ;
+using big_int = boost::multiprecision::cpp_int;
 
-ShortDate pasha_calc(int year)
+/*----------------------------------------------*/
+/*                  FUNCTIONS                   */
+/*----------------------------------------------*/
+
+big_int string_to_big_int(const std::string& i)
+try
 {
-	auto [y, m, d] = OrthodoxCalendar::pascha(year);
-	return {m, d};
+	big_int res (i);
+	return res;
+}
+catch(const std::exception& e)
+{
+	throw	std::runtime_error("ошибка преобразования строки \""+i+"\" в cpp_int.");
 }
 
-uint256_t jdn_for_date(int y, int8_t m, int8_t d, bool julian=true)
+/*----------------------------------------------*/
+/*              class year_month_day            */
+/*----------------------------------------------*/
+
+year_month_day::year_month_day(std::string y, int8_t m, int8_t d)
+	: year{std::move(y)}, month{m}, day{d}
 {
-	if(y<1) return 0;
-	if(julian) {
-		uint64_t a = (14 - m) / 12;
-		uint64_t b = y + 4800 - a;
-		uint64_t c = m + 12 * a - 3;
-		uint64_t x1 = (153 * c + 2) / 5;
-		uint64_t x2 = b / 4;
-		uint256_t res {b};
-		res *= 365;
-		res += d;
-		res += x1;
-		res += x2;
-		res -= 32083;
-		return res;
+	static const char* const digits_str = "0123456789";
+	if(auto x = year.find_first_not_of(digits_str); x!=year.npos)
+		throw	std::runtime_error("неверный параметр конструктора у = "+year+". невозможно создать объект.");
+}
+
+year_month_day::year_month_day(unsigned long long y, int8_t m, int8_t d)
+	: year_month_day(std::to_string(y), m, d)
+{
+}
+
+bool year_month_day::operator==(const year_month_day& rhs) const = default;
+
+bool year_month_day::operator!=(const year_month_day& rhs) const
+{
+	return !(*this==rhs);
+}
+
+bool year_month_day::operator<(const year_month_day& rhs) const
+{
+	if(year==rhs.year) {
+		return std::make_pair(month, day) < std::make_pair(rhs.month, rhs.day);
 	} else {
-		uint64_t a = (14 - m) / 12;
-		uint64_t b = y + 4800 - a;
-		uint64_t c = m + 12 * a - 3;
-		uint64_t x1 = (153 * c + 2) / 5;
-		uint64_t x2 = b / 4;
-		uint64_t x3 = b / 100;
-		uint64_t x4 = b / 400;
-		uint256_t res {b};
-		res *= 365;
-		res += d;
-		res += x1;
-		res += x2;
-		res -= x3;
-		res += x4;
-		res -= 32045;
-		return res;
+		big_int lhsy{ string_to_big_int(year) }, rhsy{ string_to_big_int(rhs.year) };
+		return lhsy < rhsy;
 	}
 }
+
+bool year_month_day::operator>(const year_month_day& rhs) const
+{
+	return (*this!=rhs) && !(*this<rhs);
+}
+
+}//namespace oxc
+namespace std {
+
+template<> struct hash<oxc::year_month_day>
+{
+	size_t operator()(const oxc::year_month_day& ymd) const noexcept
+	{
+		string s {ymd.year};
+		s += '/' + to_string(ymd.month) + '/' + to_string(ymd.day);
+    return hash<string>{}(s);
+	}
+};
+
+}//namespace std
+namespace oxc {
+
+/*----------------------------------------------*/
+/*                 class Jdn                    */
+/*----------------------------------------------*/
+
+class Jdn {
+	big_int value;
+public:
+	Jdn(const std::string& year, const int8_t m, const int8_t d, const bool julian=true)
+		: value{ string_to_big_int(year) }
+	{
+		if(value>0) {
+			if(julian) {
+				uint64_t a = (14 - m) / 12;
+				big_int b = value + 4800 - a;
+				uint64_t c = m + 12 * a - 3;
+				uint64_t x1 = (153 * c + 2) / 5;
+				big_int x2 = b / 4;
+				b *= 365;
+				b += d;
+				b += x1;
+				b += x2;
+				b -= 32083;
+				value = b;
+			} else {
+				uint64_t a = (14 - m) / 12;
+				big_int b = value + 4800 - a;
+				uint64_t c = m + 12 * a - 3;
+				uint64_t x1 = (153 * c + 2) / 5;
+				big_int x2 = b / 4;
+				big_int x3 = b / 100;
+				big_int x4 = b / 400;
+				b *= 365;
+				b += d;
+				b += x1;
+				b += x2;
+				b -= x3;
+				b += x4;
+				b -= 32045;
+				value = b;
+			}
+		}
+	}
+	std::string str() const { return value.str(); }
+	big_int get() const { return value; }
+};
 
 /*----------------------------------------------*/
 /*              class OrthYear                  */
 /*----------------------------------------------*/
 
 class OrthYear {
+
+	ShortDate pasha_calc(const big_int& year)
+	{ //use Gauss method for julian calendar
+		int8_t m_=3, p;
+		unsigned a, b, c, d, e;
+		a = static_cast<unsigned>(year % 19);
+		b = static_cast<unsigned>(year % 4);
+		c = static_cast<unsigned>(year % 7);
+		d = (19*a+15) % 30;
+		e = (2*b+4*c+6*d+6) % 7;
+		p = 22 + d + e;
+		if(p>31) {
+			p = d + e - 9;
+			m_ = 4;
+		}
+		return std::make_pair(m_, p);
+	}
 
 	struct Data1 {
 		int8_t dn{-1};
@@ -113,6 +208,7 @@ class OrthYear {
 			return ShortDate{month, day} == rhs;
 		}
 	};
+
 	struct Data2 {
 		uint16_t marker{};
 		int8_t day{};
@@ -135,16 +231,25 @@ class OrthYear {
 			return lhs < rhs.marker;
 		}
 	};
-	std::vector<Data1> data1;
-	std::vector<Data2> data2;
+
+	std::vector<Data1> data1;//sorted array
+	std::vector<Data2> data2;//sorted array
 	int8_t winter_indent;
 	int8_t spring_indent;
-	std::optional<decltype(data1)::const_iterator> find_in_data1(int8_t m, int8_t d) const;
+
+	std::optional<decltype(data1)::const_iterator> find_in_data1(int8_t m, int8_t d) const
+	{
+		auto dd = ShortDate{m, d};
+		auto fr = std::lower_bound(data1.begin(), data1.end(), dd);
+		if(fr==data1.end()) return std::nullopt;
+		if( !(*fr==dd) ) return std::nullopt;
+		return fr;
+	}
 
 public:
-	/**
-	 * 	\brief Основной Конструктор объекта
-	 * 	\param [in] y число года в диапазоне от 2 до INT_MAX-1
+	/*
+	 * 	\brief Конструктор
+	 * 	\param [in] year число года в диапазоне от 2 до ...
 	 * 	\param [in] il список номеров добавочных седмиц при вычислении зимней / осенней отступкu литургийных чтений.
 	 *  \param [in] osen_otstupka_apostol признак указывающий учитывать ли апостол при вычислении осенней отступкu
 	 *  \throw std::runtime_error в случае неверного диапазона входных параметров или если il.size()!=17 или если (il[i] < 1 || il[i] > 33)
@@ -157,17 +262,14 @@ public:
 	 *   следующие 5 элемента - номера добавочных седмиц зимней отступкu при отступке в 5 седмиц.<br>
 	 *   последние 2 элемента - номера добавочных седмиц осенней отступкu.<br>
 	 */
-	OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol);
-	///Конструктор с параметрами по умолчанию
-	OrthYear(int y, bool osen_otstupka_apostol)
-		: OrthYear(y, std::array{33,32,33,31,32,33,30,31,32,33,30,31,17,32,33,10,11}, osen_otstupka_apostol) {}
-	///Конструктор с параметрами по умолчанию
-	OrthYear(int y): OrthYear(y, false) {}
-	///Конструктор с параметрами по умолчанию
-	OrthYear(int y, std::span<const int> il): OrthYear(y, il, false) {}
+	OrthYear(const std::string& year, std::span<const uint8_t> il, bool osen_otstupka_apostol);
+	OrthYear(const std::string& year, bool o)
+		: OrthYear(year, std::array<uint8_t,17>{33,32,33,31,32,33,30,31,32,33,30,31,17,32,33,10,11}, o) {}
+	OrthYear(const std::string& year): OrthYear(year, false) {}
+	OrthYear(const std::string& year, std::span<const uint8_t> il): OrthYear(year, il, false) {}
 
-	int8_t get_winter_indent() const;
-	int8_t get_spring_indent() const;
+	int8_t get_winter_indent() const { return winter_indent; }
+	int8_t get_spring_indent() const { return spring_indent; }
 	int8_t get_date_glas(int8_t month, int8_t day) const;
 	int8_t get_date_n50(int8_t month, int8_t day) const;
 	int8_t get_date_dn(int8_t month, int8_t day) const;
@@ -177,17 +279,17 @@ public:
 	std::optional<std::vector<uint16_t>> get_date_properties(int8_t month, int8_t day) const;
 	std::optional<ShortDate> get_date_with(uint16_t m) const;
 	std::optional<std::vector<ShortDate>> get_alldates_with(uint16_t m) const;
-	std::optional<ShortDate> get_date_withanyof(std::span<uint16_t> m) const;
-	std::optional<ShortDate> get_date_withallof(std::span<uint16_t> m) const;
-	std::optional<std::vector<ShortDate>> get_alldates_withanyof(std::span<uint16_t> m) const;
+	std::optional<ShortDate> get_date_withanyof(std::span<const uint16_t> m) const;
+	std::optional<ShortDate> get_date_withallof(std::span<const uint16_t> m) const;
+	std::optional<std::vector<ShortDate>> get_alldates_withanyof(std::span<const uint16_t> m) const;
 	std::string get_description_forday(int8_t month, int8_t day) const;
 };
 
-OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
-{//main constructor
-	if( (y < 2) || (y > std::numeric_limits<int>::max() - 1) )
-	//"выход числа года за границу диапазона"
-		throw std::runtime_error(std::to_string(y)+' '+std::to_string(std::numeric_limits<int>::max() - 1));
+OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool osen_otstupka_apostol)
+{ //main constructor
+	big_int y { string_to_big_int(year) };
+	if( y < 2 )
+		throw std::runtime_error("выход числа года '"+y.str()+"' за границу диапазона");
 	bool bad_il{};
 	for(auto j: il) if(j<1 || j>33) bad_il = true;
 	if(il.size()!=17 || bad_il)
@@ -291,7 +393,7 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 	//таблица рядовых чтений на литургии из приложения богосл.евангелия. период от св. троицы до нед. сыропустная
 	//двумерный массив [a][b], где а - календарный номер по пятидесятнице. b - деньнедели.
 	static const TT1 evangelie_table_1 {
-		std::array { ApEvReads{27,"Ин., 27 зач., VII, 37–52; VIII, 12."},	//неделя 0. день св. троицы
+		std::array { ApEvReads{ 0X1B5, "Ин., 27 зач., VII, 37–52; VIII, 12."},	//неделя 0. день св. троицы
 						ApEvReads{},
 						ApEvReads{},
 						ApEvReads{},
@@ -299,293 +401,293 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 						ApEvReads{},
 						ApEvReads{}
 					},
-		std::array { ApEvReads{38,"Мф., 38 зач., X, 32–33, 37–38; XIX, 27–30."},	//Неделя 1 всех святых
-						ApEvReads{75,"Мф., 75 зач., XVIII, 10–20."},	//пн - Святаго Духа
-						ApEvReads{10,"Мф., 10 зач., IV, 25 – V, 12."},	//вт - седмица 1
-						ApEvReads{12,"Мф., 12 зач., V, 20–26."},	//ср
-						ApEvReads{13,"Мф., 13 зач., V, 27–32."},	//чт
-						ApEvReads{14,"Мф., 14 зач., V, 33–41."},	//пт
-						ApEvReads{15,"Мф., 15 зач., V, 42–48."}	//сб
+		std::array { ApEvReads{ 0X262, "Мф., 38 зач., X, 32–33, 37–38; XIX, 27–30."},	//Неделя 1 всех святых
+						ApEvReads{ 0X4B2, "Мф., 75 зач., XVIII, 10–20."},	//пн - Святаго Духа
+						ApEvReads{ 0XA2, "Мф., 10 зач., IV, 25 – V, 12."},	//вт - седмица 1
+						ApEvReads{ 0XC2, "Мф., 12 зач., V, 20–26."},	//ср
+						ApEvReads{ 0XD2, "Мф., 13 зач., V, 27–32."},	//чт
+						ApEvReads{ 0XE2, "Мф., 14 зач., V, 33–41."},	//пт
+						ApEvReads{ 0XF2, "Мф., 15 зач., V, 42–48."}	//сб
 					},
-		std::array { ApEvReads{ 9,"Мф., 9 зач., IV, 18–23."},	//Неделя 2
-						ApEvReads{19,"Мф., 19 зач., VI, 31–34; VII, 9–11."},	//пн - седмица 2
-						ApEvReads{22,"Мф., 22 зач., VII, 15–21."},	//вт
-						ApEvReads{23,"Мф., 23 зач., VII, 21–23."},	//ср
-						ApEvReads{27,"Мф., 27 зач., VIII, 23–27."},	//чт
-						ApEvReads{31,"Мф., 31 зач., IX, 14–17."},	//пт
-						ApEvReads{20,"Мф., 20 зач., VII, 1–8."}	//сб
+		std::array { ApEvReads{ 0X92, "Мф., 9 зач., IV, 18–23."},	//Неделя 2
+						ApEvReads{ 0X132, "Мф., 19 зач., VI, 31–34; VII, 9–11."},	//пн - седмица 2
+						ApEvReads{ 0X162, "Мф., 22 зач., VII, 15–21."},	//вт
+						ApEvReads{ 0X172, "Мф., 23 зач., VII, 21–23."},	//ср
+						ApEvReads{ 0X1B2, "Мф., 27 зач., VIII, 23–27."},	//чт
+						ApEvReads{ 0X1F2, "Мф., 31 зач., IX, 14–17."},	//пт
+						ApEvReads{ 0X142, "Мф., 20 зач., VII, 1–8."}	//сб
 					},
-		std::array { ApEvReads{18,"Мф., 18 зач., VI, 22–33."},	//Неделя 3
-						ApEvReads{34,"Мф., 34 зач., IX, 36 – X, 8."},	//пн - седмица 3
-						ApEvReads{35,"Мф., 35 зач., X, 9–15."},	//вт
-						ApEvReads{36,"Мф., 36 зач., X, 16–22."},	//ср
-						ApEvReads{37,"Мф., 37 зач., X, 23–31."},	//чт
-						ApEvReads{38,"Мф., 38 зач., X, 32–36; XI, 1."},	//пт
-						ApEvReads{24,"Мф., 24 зач., VII, 24 – VIII, 4."}	//сб
+		std::array { ApEvReads{ 0X122, "Мф., 18 зач., VI, 22–33."},	//Неделя 3
+						ApEvReads{ 0X222, "Мф., 34 зач., IX, 36 – X, 8."},	//пн - седмица 3
+						ApEvReads{ 0X232, "Мф., 35 зач., X, 9–15."},	//вт
+						ApEvReads{ 0X242, "Мф., 36 зач., X, 16–22."},	//ср
+						ApEvReads{ 0X252, "Мф., 37 зач., X, 23–31."},	//чт
+						ApEvReads{ 0X262, "Мф., 38 зач., X, 32–36; XI, 1."},	//пт
+						ApEvReads{ 0X182, "Мф., 24 зач., VII, 24 – VIII, 4."}	//сб
 					},
-		std::array { ApEvReads{25,"Мф., 25 зач., VIII, 5–13."},	//Неделя 4
-						ApEvReads{40,"Мф., 40 зач., XI, 2–15."},	//пн - седмица 4
-						ApEvReads{41,"Мф., 41 зач., XI, 16–20."},	//вт
-						ApEvReads{42,"Мф., 42 зач., XI, 20–26."},	//ср
-						ApEvReads{43,"Мф., 43 зач., XI, 27–30."},	//чт
-						ApEvReads{44,"Мф., 44 зач., XII, 1–8."},	//пт
-						ApEvReads{26,"Мф., 26 зач., VIII, 14–23."}	//сб
+		std::array { ApEvReads{ 0X192, "Мф., 25 зач., VIII, 5–13."},	//Неделя 4
+						ApEvReads{ 0X282, "Мф., 40 зач., XI, 2–15."},	//пн - седмица 4
+						ApEvReads{ 0X292, "Мф., 41 зач., XI, 16–20."},	//вт
+						ApEvReads{ 0X2A2, "Мф., 42 зач., XI, 20–26."},	//ср
+						ApEvReads{ 0X2B2, "Мф., 43 зач., XI, 27–30."},	//чт
+						ApEvReads{ 0X2C2, "Мф., 44 зач., XII, 1–8."},	//пт
+						ApEvReads{ 0X1A2, "Мф., 26 зач., VIII, 14–23."}	//сб
 					},
-		std::array { ApEvReads{28,"Мф., 28 зач., VIII, 28 - IX, 1."},	//Неделя 5
-						ApEvReads{45,"Мф., 45 зач., XII, 9-13."},	//пн - седмица 5
-						ApEvReads{46,"Мф., 46 зач., XII, 14–16, 22–30."},	//вт
-						ApEvReads{48,"Мф., 48 зач., XII, 38–45."},	//ср
-						ApEvReads{49,"Мф., 49 зач., XII, 46 – XIII, 3."},	//чт
-						ApEvReads{50,"Мф., 50 зач., XIII, 3–9."},	//пт
-						ApEvReads{30,"Мф., 30 зач., IX, 9–13."}	//сб
+		std::array { ApEvReads{ 0X1C2, "Мф., 28 зач., VIII, 28 - IX, 1."},	//Неделя 5
+						ApEvReads{ 0X2D2, "Мф., 45 зач., XII, 9-13."},	//пн - седмица 5
+						ApEvReads{ 0X2E2, "Мф., 46 зач., XII, 14–16, 22–30."},	//вт
+						ApEvReads{ 0X302, "Мф., 48 зач., XII, 38–45."},	//ср
+						ApEvReads{ 0X312, "Мф., 49 зач., XII, 46 – XIII, 3."},	//чт
+						ApEvReads{ 0X322, "Мф., 50 зач., XIII, 3–9."},	//пт
+						ApEvReads{ 0X1E2, "Мф., 30 зач., IX, 9–13."}	//сб
 					},
-		std::array { ApEvReads{29,"Мф., 29 зач., IX, 1–8."},	//Неделя 6
-						ApEvReads{51,"Мф., 51 зач., XIII, 10–23."},	//пн - седмица 6
-						ApEvReads{52,"Мф., 52 зач., XIII, 24–30."},	//вт
-						ApEvReads{53,"Мф., 53 зач., XIII, 31–36."},	//ср
-						ApEvReads{54,"Мф., 54 зач., XIII, 36–43."},	//чт
-						ApEvReads{55,"Мф., 55 зач., XIII, 44–54."},	//пт
-						ApEvReads{32,"Мф., 32 зач., IX, 18–26."}	//сб
+		std::array { ApEvReads{ 0X1D2, "Мф., 29 зач., IX, 1–8."},	//Неделя 6
+						ApEvReads{ 0X332, "Мф., 51 зач., XIII, 10–23."},	//пн - седмица 6
+						ApEvReads{ 0X342, "Мф., 52 зач., XIII, 24–30."},	//вт
+						ApEvReads{ 0X352, "Мф., 53 зач., XIII, 31–36."},	//ср
+						ApEvReads{ 0X362, "Мф., 54 зач., XIII, 36–43."},	//чт
+						ApEvReads{ 0X372, "Мф., 55 зач., XIII, 44–54."},	//пт
+						ApEvReads{ 0X202, "Мф., 32 зач., IX, 18–26."}	//сб
 					},
-		std::array { ApEvReads{33,"Мф., 33 зач., IX, 27–35."},	//Неделя 7
-						ApEvReads{56,"Мф., 56 зач., XIII, 54–58."},	//пн - седмица 7
-						ApEvReads{57,"Мф., 57 зач., XIV, 1–13."},	//вт
-						ApEvReads{60,"Мф., 60 зач., XIV, 35 – XV, 11."},	//ср
-						ApEvReads{61,"Мф., 61 зач., XV, 12–21."},	//чт
-						ApEvReads{63,"Мф., 63 зач., XV, 29–31."},	//пт
-						ApEvReads{39,"Мф., 39 зач., X, 37 – XI, 1."}	//сб
+		std::array { ApEvReads{ 0X212, "Мф., 33 зач., IX, 27–35."},	//Неделя 7
+						ApEvReads{ 0X382, "Мф., 56 зач., XIII, 54–58."},	//пн - седмица 7
+						ApEvReads{ 0X392, "Мф., 57 зач., XIV, 1–13."},	//вт
+						ApEvReads{ 0X3C2, "Мф., 60 зач., XIV, 35 – XV, 11."},	//ср
+						ApEvReads{ 0X3D2, "Мф., 61 зач., XV, 12–21."},	//чт
+						ApEvReads{ 0X3F2, "Мф., 63 зач., XV, 29–31."},	//пт
+						ApEvReads{ 0X272, "Мф., 39 зач., X, 37 – XI, 1."}	//сб
 					},
-		std::array { ApEvReads{58,"Мф., 58 зач., XIV, 14–22."},	//Неделя 8
-						ApEvReads{65,"Мф., 65 зач., XVI, 1-6."},	//пн - седмица 8
-						ApEvReads{66,"Мф., 66 зач., XVI, 6-12."},	//вт
-						ApEvReads{68,"Мф., 68 зач., XVI, 20–24."},	//ср
-						ApEvReads{69,"Мф., 69 зач., XVI, 24–28."},	//чт
-						ApEvReads{71,"Мф., 71 зач., XVII, 10-18."},	//пт
-						ApEvReads{47,"Мф., 47 зач., XII, 30–37."}	//сб
+		std::array { ApEvReads{ 0X3A2, "Мф., 58 зач., XIV, 14–22."},	//Неделя 8
+						ApEvReads{ 0X412, "Мф., 65 зач., XVI, 1-6."},	//пн - седмица 8
+						ApEvReads{ 0X422, "Мф., 66 зач., XVI, 6-12."},	//вт
+						ApEvReads{ 0X442, "Мф., 68 зач., XVI, 20–24."},	//ср
+						ApEvReads{ 0X452, "Мф., 69 зач., XVI, 24–28."},	//чт
+						ApEvReads{ 0X472, "Мф., 71 зач., XVII, 10-18."},	//пт
+						ApEvReads{ 0X2F2, "Мф., 47 зач., XII, 30–37."}	//сб
 					},
-		std::array { ApEvReads{59,"Мф., 59 зач., XIV, 22–34."},	//Неделя 9
-						ApEvReads{74,"Мф., 74 зач., XVIII, 1–11."},	//пн - седмица 9
-						ApEvReads{76,"Мф., 76 зач., XVIII, 18–22; XIX, 1–2, 13–15."},	//вт
-						ApEvReads{80,"Мф., 80 зач., XX, 1–16."},	//ср
-						ApEvReads{81,"Мф., 81 зач., XX, 17–28."},	//чт
-						ApEvReads{83,"Мф., 83 зач., XXI, 1–11, 15–17."},	//пт
-						ApEvReads{64,"Мф., 64 зач., XV, 32–39."}	//сб
+		std::array { ApEvReads{ 0X3B2, "Мф., 59 зач., XIV, 22–34."},	//Неделя 9
+						ApEvReads{ 0X4A2, "Мф., 74 зач., XVIII, 1–11."},	//пн - седмица 9
+						ApEvReads{ 0X4C2, "Мф., 76 зач., XVIII, 18–22; XIX, 1–2, 13–15."},	//вт
+						ApEvReads{ 0X502, "Мф., 80 зач., XX, 1–16."},	//ср
+						ApEvReads{ 0X512, "Мф., 81 зач., XX, 17–28."},	//чт
+						ApEvReads{ 0X532, "Мф., 83 зач., XXI, 1–11, 15–17."},	//пт
+						ApEvReads{ 0X402, "Мф., 64 зач., XV, 32–39."}	//сб
 					},
-		std::array { ApEvReads{72,"Мф., 72 зач., XVII, 14–23."},	//Неделя 10
-						ApEvReads{84,"Мф., 84 зач., XXI, 18–22."},	//пн - седмица 10
-						ApEvReads{85,"Мф., 85 зач., XXI, 23–27."},	//вт
-						ApEvReads{86,"Мф., 86 зач., XXI, 28–32."},	//ср
-						ApEvReads{88,"Мф., 88 зач., XXI, 43-46."},	//чт
-						ApEvReads{91,"Мф., 91 зач., XXII, 23–33."},	//пт
-						ApEvReads{73,"Мф., 73 зач., XVII, 24 – XVIII, 4."}	//сб
+		std::array { ApEvReads{ 0X482, "Мф., 72 зач., XVII, 14–23."},	//Неделя 10
+						ApEvReads{ 0X542, "Мф., 84 зач., XXI, 18–22."},	//пн - седмица 10
+						ApEvReads{ 0X552, "Мф., 85 зач., XXI, 23–27."},	//вт
+						ApEvReads{ 0X562, "Мф., 86 зач., XXI, 28–32."},	//ср
+						ApEvReads{ 0X582, "Мф., 88 зач., XXI, 43-46."},	//чт
+						ApEvReads{ 0X5B2, "Мф., 91 зач., XXII, 23–33."},	//пт
+						ApEvReads{ 0X492, "Мф., 73 зач., XVII, 24 – XVIII, 4."}	//сб
 					},
-		std::array { ApEvReads{77,"Мф., 77 зач., XVIII, 23–35."},	//Неделя 11
-						ApEvReads{94,"Мф., 94 зач., XXIII, 13–22."},	//пн - седмица 11
-						ApEvReads{95,"Мф., 95 зач., XXIII, 23-28."},	//вт
-						ApEvReads{96,"Мф., 96 зач., XXIII, 29–39."},	//ср
-						ApEvReads{99,"Мф., 99 зач., XXIV, 13–28."},	//чт
-						ApEvReads{100,"Мф., 100 зач., XXIV, 27–33, 42–51."},	//пт
-						ApEvReads{78,"Мф., 78 зач., XIX, 3–12."}	//сб
+		std::array { ApEvReads{ 0X4D2, "Мф., 77 зач., XVIII, 23–35."},	//Неделя 11
+						ApEvReads{ 0X5E2, "Мф., 94 зач., XXIII, 13–22."},	//пн - седмица 11
+						ApEvReads{ 0X5F2, "Мф., 95 зач., XXIII, 23-28."},	//вт
+						ApEvReads{ 0X602, "Мф., 96 зач., XXIII, 29–39."},	//ср
+						ApEvReads{ 0X632, "Мф., 99 зач., XXIV, 13–28."},	//чт
+						ApEvReads{ 0X642, "Мф., 100 зач., XXIV, 27–33, 42–51."},	//пт
+						ApEvReads{ 0X4E2, "Мф., 78 зач., XIX, 3–12."}	//сб
 					},
-		std::array { ApEvReads{79,"Мф., 79 зач., XIX, 16–26."},	//Неделя 12
-						ApEvReads{2,"Мк., 2 зач., I, 9–15."},	//пн - седмица 12
-						ApEvReads{3,"Мк., 3 зач., I, 16–22."},	//вт
-						ApEvReads{4,"Мк., 4 зач., I, 23–28."},	//ср
-						ApEvReads{5,"Мк., 5 зач., I, 29-35."},	//чт
-						ApEvReads{9,"Мк., 9 зач., II, 18–22."},	//пт
-						ApEvReads{82,"Мф., 82 зач., XX, 29–34."}	//сб
+		std::array { ApEvReads{ 0X4F2, "Мф., 79 зач., XIX, 16–26."},	//Неделя 12
+						ApEvReads{ 0X23, "Мк., 2 зач., I, 9–15."},	//пн - седмица 12
+						ApEvReads{ 0X33, "Мк., 3 зач., I, 16–22."},	//вт
+						ApEvReads{ 0X43, "Мк., 4 зач., I, 23–28."},	//ср
+						ApEvReads{ 0X53, "Мк., 5 зач., I, 29-35."},	//чт
+						ApEvReads{ 0X93, "Мк., 9 зач., II, 18–22."},	//пт
+						ApEvReads{ 0X522, "Мф., 82 зач., XX, 29–34."}	//сб
 					},
-		std::array { ApEvReads{87,"Мф., 87 зач., XXI, 33–42."},	//Неделя 13
-						ApEvReads{11,"Мк., 11 зач., III, 6–12."},	//пн - седмица 13
-						ApEvReads{12,"Мк., 12 зач., III, 13–19."},	//вт
-						ApEvReads{13,"Мк., 13 зач., III, 20–27."},	//ср
-						ApEvReads{14,"Мк., 14 зач., III, 28–35."},	//чт
-						ApEvReads{15,"Мк., 15 зач., IV, 1–9."},	//пт
-						ApEvReads{90,"Мф., 90 зач., XXII, 15-22."}	//сб
+		std::array { ApEvReads{ 0X572, "Мф., 87 зач., XXI, 33–42."},	//Неделя 13
+						ApEvReads{ 0XB3, "Мк., 11 зач., III, 6–12."},	//пн - седмица 13
+						ApEvReads{ 0XC3, "Мк., 12 зач., III, 13–19."},	//вт
+						ApEvReads{ 0XD3, "Мк., 13 зач., III, 20–27."},	//ср
+						ApEvReads{ 0XE3, "Мк., 14 зач., III, 28–35."},	//чт
+						ApEvReads{ 0XF3, "Мк., 15 зач., IV, 1–9."},	//пт
+						ApEvReads{ 0X5A2, "Мф., 90 зач., XXII, 15-22."}	//сб
 					},
-		std::array { ApEvReads{89,"Мф., 89 зач., XXII, 1–14."},	//Неделя 14
-						ApEvReads{16,"Мк., 16 зач., IV, 10–23."},	//пн - седмица 14
-						ApEvReads{17,"Мк., 17 зач., IV, 24–34."},	//вт
-						ApEvReads{18,"Мк., 18 зач., IV, 35–41."},	//ср
-						ApEvReads{19,"Мк., 19 зач., V, 1-20."},	//чт
-						ApEvReads{20,"Мк., 20 зач., V, 22–24, 35 – VI, 1."},	//пт
-						ApEvReads{93,"Мф., 93 зач., XXIII, 1–12."}	//сб
+		std::array { ApEvReads{ 0X592, "Мф., 89 зач., XXII, 1–14."},	//Неделя 14
+						ApEvReads{ 0X103, "Мк., 16 зач., IV, 10–23."},	//пн - седмица 14
+						ApEvReads{ 0X113, "Мк., 17 зач., IV, 24–34."},	//вт
+						ApEvReads{ 0X123, "Мк., 18 зач., IV, 35–41."},	//ср
+						ApEvReads{ 0X133, "Мк., 19 зач., V, 1-20."},	//чт
+						ApEvReads{ 0X143, "Мк., 20 зач., V, 22–24, 35 – VI, 1."},	//пт
+						ApEvReads{ 0X5D2, "Мф., 93 зач., XXIII, 1–12."}	//сб
 					},
-		std::array { ApEvReads{92,"Мф., 92 зач., XXII, 35–46."},	//Неделя 15
-						ApEvReads{21,"Мк., 21 зач., V, 24–34."},	//пн - седмица 15
-						ApEvReads{22,"Мк., 22 зач., VI, 1-7."},	//вт
-						ApEvReads{23,"Мк., 23 зач., VI, 7–13."},	//ср
-						ApEvReads{25,"Мк., 25 зач., VI, 30–45."},	//чт
-						ApEvReads{26,"Мк., 26 зач., VI, 45–53."},	//пт
-						ApEvReads{97,"Мф., 97 зач., XXIV, 1–13."}	//сб
+		std::array { ApEvReads{ 0X5C2, "Мф., 92 зач., XXII, 35–46."},	//Неделя 15
+						ApEvReads{ 0X153, "Мк., 21 зач., V, 24–34."},	//пн - седмица 15
+						ApEvReads{ 0X163, "Мк., 22 зач., VI, 1-7."},	//вт
+						ApEvReads{ 0X173, "Мк., 23 зач., VI, 7–13."},	//ср
+						ApEvReads{ 0X193, "Мк., 25 зач., VI, 30–45."},	//чт
+						ApEvReads{ 0X1A3, "Мк., 26 зач., VI, 45–53."},	//пт
+						ApEvReads{ 0X612, "Мф., 97 зач., XXIV, 1–13."}	//сб
 					},
-		std::array { ApEvReads{105,"Мф., 105 зач., XXV, 14-30."},	//Неделя 16
-						ApEvReads{27,"Мк., 27 зач., VI, 54 - VII, 8."},	//пн - седмица 16
-						ApEvReads{28,"Мк., 28 зач., VII, 5-16."},	//вт
-						ApEvReads{29,"Мк., 29 зач., VII, 14–24."},	//ср
-						ApEvReads{30,"Мк., 30 зач., VII, 24–30."},	//чт
-						ApEvReads{32,"Мк., 32 зач., VIII, 1-10."},	//пт
-						ApEvReads{101,"Мф., 101 зач., XXIV, 34–44."}	//сб
+		std::array { ApEvReads{ 0X692, "Мф., 105 зач., XXV, 14-30."},	//Неделя 16
+						ApEvReads{ 0X1B3, "Мк., 27 зач., VI, 54 - VII, 8."},	//пн - седмица 16
+						ApEvReads{ 0X1C3, "Мк., 28 зач., VII, 5-16."},	//вт
+						ApEvReads{ 0X1D3, "Мк., 29 зач., VII, 14–24."},	//ср
+						ApEvReads{ 0X1E3, "Мк., 30 зач., VII, 24–30."},	//чт
+						ApEvReads{ 0X203, "Мк., 32 зач., VIII, 1-10."},	//пт
+						ApEvReads{ 0X652, "Мф., 101 зач., XXIV, 34–44."}	//сб
 					},
-		std::array { ApEvReads{62,"Мф., 62 зач., XV, 21–28."},	//Неделя 17
-						ApEvReads{48,"Мк., 48 зач., X, 46–52."},	//пн - седмица 17
-						ApEvReads{50,"Мк., 50 зач., XI, 11–23."},	//вт
-						ApEvReads{51,"Мк., 51 зач., XI, 23–26."},	//ср
-						ApEvReads{52,"Мк., 52 зач., XI, 27–33."},	//чт
-						ApEvReads{53,"Мк., 53 зач., XII, 1–12."},	//пт
-						ApEvReads{104,"Мф., 104 зач., XXV, 1–13."}	//сб
+		std::array { ApEvReads{ 0X3E2, "Мф., 62 зач., XV, 21–28."},	//Неделя 17
+						ApEvReads{ 0X303, "Мк., 48 зач., X, 46–52."},	//пн - седмица 17
+						ApEvReads{ 0X323, "Мк., 50 зач., XI, 11–23."},	//вт
+						ApEvReads{ 0X333, "Мк., 51 зач., XI, 23–26."},	//ср
+						ApEvReads{ 0X343, "Мк., 52 зач., XI, 27–33."},	//чт
+						ApEvReads{ 0X353, "Мк., 53 зач., XII, 1–12."},	//пт
+						ApEvReads{ 0X682, "Мф., 104 зач., XXV, 1–13."}	//сб
 					},
-		std::array { ApEvReads{17,"Лк., 17 зач., V, 1–11."},	//Неделя 18
-						ApEvReads{10,"Лк., 10 зач., III, 19–22."},	//пн - седмица 18
-						ApEvReads{11,"Лк., 11 зач., III, 23 – IV, 1."},	//вт
-						ApEvReads{12,"Лк., 12 зач., IV, 1-15."},	//ср
-						ApEvReads{13,"Лк., 13 зач., IV, 16–22."},	//чт
-						ApEvReads{14,"Лк., 14 зач., IV, 22–30."},	//пт
-						ApEvReads{15,"Лк., 15 зач., IV, 31–36."}	//сб
+		std::array { ApEvReads{ 0X114, "Лк., 17 зач., V, 1–11."},	//Неделя 18
+						ApEvReads{ 0XA4, "Лк., 10 зач., III, 19–22."},	//пн - седмица 18
+						ApEvReads{ 0XB4, "Лк., 11 зач., III, 23 – IV, 1."},	//вт
+						ApEvReads{ 0XC4, "Лк., 12 зач., IV, 1-15."},	//ср
+						ApEvReads{ 0XD4, "Лк., 13 зач., IV, 16–22."},	//чт
+						ApEvReads{ 0XE4, "Лк., 14 зач., IV, 22–30."},	//пт
+						ApEvReads{ 0XF4, "Лк., 15 зач., IV, 31–36."}	//сб
 					},
-		std::array { ApEvReads{26,"Лк., 26 зач., VI, 31–36."},	//Неделя 19
-						ApEvReads{16,"Лк., 16 зач., IV, 37–44."},	//пн - седмица 19
-						ApEvReads{18,"Лк., 18 зач., V, 12-16."},	//вт
-						ApEvReads{21,"Лк., 21 зач., V, 33–39."},	//ср
-						ApEvReads{23,"Лк., 23 зач., VI, 12–19."},	//чт
-						ApEvReads{24,"Лк., 24 зач., VI, 17–23."},	//пт
-						ApEvReads{19,"Лк., 19 зач., V, 17–26."}	//сб
+		std::array { ApEvReads{ 0X1A4, "Лк., 26 зач., VI, 31–36."},	//Неделя 19
+						ApEvReads{ 0X104, "Лк., 16 зач., IV, 37–44."},	//пн - седмица 19
+						ApEvReads{ 0X124, "Лк., 18 зач., V, 12-16."},	//вт
+						ApEvReads{ 0X154, "Лк., 21 зач., V, 33–39."},	//ср
+						ApEvReads{ 0X174, "Лк., 23 зач., VI, 12–19."},	//чт
+						ApEvReads{ 0X184, "Лк., 24 зач., VI, 17–23."},	//пт
+						ApEvReads{ 0X134, "Лк., 19 зач., V, 17–26."}	//сб
 					},
-		std::array { ApEvReads{30,"Лк., 30 зач., VII, 11–16."},	//Неделя 20
-						ApEvReads{25,"Лк., 25 зач., VI, 24–30."},	//пн - седмица 20
-						ApEvReads{27,"Лк., 27 зач., VI, 37–45."},	//вт
-						ApEvReads{28,"Лк., 28 зач., VI, 46 – VII, 1."},	//ср
-						ApEvReads{31,"Лк., 31 зач., VII, 17–30."},	//чт
-						ApEvReads{32,"Лк., 32 зач., VII, 31–35."},	//пт
-						ApEvReads{20,"Лк., 20 зач., V, 27–32."}	//сб
+		std::array { ApEvReads{ 0X1E4, "Лк., 30 зач., VII, 11–16."},	//Неделя 20
+						ApEvReads{ 0X194, "Лк., 25 зач., VI, 24–30."},	//пн - седмица 20
+						ApEvReads{ 0X1B4, "Лк., 27 зач., VI, 37–45."},	//вт
+						ApEvReads{ 0X1C4, "Лк., 28 зач., VI, 46 – VII, 1."},	//ср
+						ApEvReads{ 0X1F4, "Лк., 31 зач., VII, 17–30."},	//чт
+						ApEvReads{ 0X204, "Лк., 32 зач., VII, 31–35."},	//пт
+						ApEvReads{ 0X144, "Лк., 20 зач., V, 27–32."}	//сб
 					},
-		std::array { ApEvReads{35,"Лк., 35 зач., VIII, 5–15."},	//Неделя 21
-						ApEvReads{33,"Лк., 33 зач., VII, 36–50."},	//пн - седмица 21
-						ApEvReads{34,"Лк., 34 зач., VIII, 1–3."},	//вт
-						ApEvReads{37,"Лк., 37 зач., VIII, 22–25."},	//ср
-						ApEvReads{41,"Лк., 41 зач., IX, 7–11."},	//чт
-						ApEvReads{42,"Лк., 42 зач., IX, 12–18."},	//пт
-						ApEvReads{22,"Лк., 22 зач., VI, 1–10."}	//сб
+		std::array { ApEvReads{ 0X234, "Лк., 35 зач., VIII, 5–15."},	//Неделя 21
+						ApEvReads{ 0X214, "Лк., 33 зач., VII, 36–50."},	//пн - седмица 21
+						ApEvReads{ 0X224, "Лк., 34 зач., VIII, 1–3."},	//вт
+						ApEvReads{ 0X254, "Лк., 37 зач., VIII, 22–25."},	//ср
+						ApEvReads{ 0X294, "Лк., 41 зач., IX, 7–11."},	//чт
+						ApEvReads{ 0X2A4, "Лк., 42 зач., IX, 12–18."},	//пт
+						ApEvReads{ 0X164, "Лк., 22 зач., VI, 1–10."}	//сб
 					},
-		std::array { ApEvReads{83,"Лк., 83 зач., XVI, 19–31."},	//Неделя 22
-						ApEvReads{43,"Лк., 43 зач., IX, 18–22."},	//пн - седмица 22
-						ApEvReads{44,"Лк., 44 зач., IX, 23-27."},	//вт
-						ApEvReads{47,"Лк., 47 зач., IX, 44–50."},	//ср
-						ApEvReads{48,"Лк., 48 зач., IX, 49–56."},	//чт
-						ApEvReads{50,"Лк., 50 зач., X, 1–15."},	//пт
-						ApEvReads{29,"Лк., 29 зач., VII, 1–10."}	//сб
+		std::array { ApEvReads{ 0X534, "Лк., 83 зач., XVI, 19–31."},	//Неделя 22
+						ApEvReads{ 0X2B4, "Лк., 43 зач., IX, 18–22."},	//пн - седмица 22
+						ApEvReads{ 0X2C4, "Лк., 44 зач., IX, 23-27."},	//вт
+						ApEvReads{ 0X2F4, "Лк., 47 зач., IX, 44–50."},	//ср
+						ApEvReads{ 0X304, "Лк., 48 зач., IX, 49–56."},	//чт
+						ApEvReads{ 0X324, "Лк., 50 зач., X, 1–15."},	//пт
+						ApEvReads{ 0X1D4, "Лк., 29 зач., VII, 1–10."}	//сб
 					},
-		std::array { ApEvReads{38,"Лк., 38 зач., VIII, 26–39."},	//Неделя 23
-						ApEvReads{52,"Лк., 52 зач., X, 22–24."},	//пн - седмица 23
-						ApEvReads{55,"Лк., 55 зач., XI, 1–10."},	//вт
-						ApEvReads{56,"Лк., 56 зач., XI, 9–13."},	//ср
-						ApEvReads{57,"Лк., 57 зач., XI, 14–23."},	//чт
-						ApEvReads{58,"Лк., 58 зач., XI, 23–26."},	//пт
-						ApEvReads{36,"Лк., 36 зач., VIII, 16–21."}	//сб
+		std::array { ApEvReads{ 0X264, "Лк., 38 зач., VIII, 26–39."},	//Неделя 23
+						ApEvReads{ 0X344, "Лк., 52 зач., X, 22–24."},	//пн - седмица 23
+						ApEvReads{ 0X374, "Лк., 55 зач., XI, 1–10."},	//вт
+						ApEvReads{ 0X384, "Лк., 56 зач., XI, 9–13."},	//ср
+						ApEvReads{ 0X394, "Лк., 57 зач., XI, 14–23."},	//чт
+						ApEvReads{ 0X3A4, "Лк., 58 зач., XI, 23–26."},	//пт
+						ApEvReads{ 0X244, "Лк., 36 зач., VIII, 16–21."}	//сб
 					},
-		std::array { ApEvReads{39,"Лк., 39 зач., VIII, 41–56."},	//Неделя 24
-						ApEvReads{59,"Лк., 59 зач., XI, 29–33."},	//пн - седмица 24
-						ApEvReads{60,"Лк., 60 зач., XI, 34–41."},	//вт
-						ApEvReads{61,"Лк., 61 зач., XI, 42–46."},	//ср
-						ApEvReads{62,"Лк., 62 зач., XI, 47 – XII, 1."},	//чт
-						ApEvReads{63,"Лк., 63 зач., XII, 2–12."},	//пт
-						ApEvReads{40,"Лк., 40 зач., IX, 1–6."}	//сб
+		std::array { ApEvReads{ 0X274, "Лк., 39 зач., VIII, 41–56."},	//Неделя 24
+						ApEvReads{ 0X3B4, "Лк., 59 зач., XI, 29–33."},	//пн - седмица 24
+						ApEvReads{ 0X3C4, "Лк., 60 зач., XI, 34–41."},	//вт
+						ApEvReads{ 0X3D4, "Лк., 61 зач., XI, 42–46."},	//ср
+						ApEvReads{ 0X3E4, "Лк., 62 зач., XI, 47 – XII, 1."},	//чт
+						ApEvReads{ 0X3F4, "Лк., 63 зач., XII, 2–12."},	//пт
+						ApEvReads{ 0X284, "Лк., 40 зач., IX, 1–6."}	//сб
 					},
-		std::array { ApEvReads{53,"Лк., 53 зач., X, 25–37."},	//Неделя 25
-						ApEvReads{65,"Лк., 65 зач., XII, 13–15, 22–31."},	//пн - седмица 25
-						ApEvReads{68,"Лк., 68 зач., XII, 42–48."},	//вт
-						ApEvReads{69,"Лк., 69 зач., XII, 48-59."},	//ср
-						ApEvReads{70,"Лк., 70 зач., XIII, 1–9."},	//чт
-						ApEvReads{73,"Лк., 73 зач., XIII, 31–35."},	//пт
-						ApEvReads{46,"Лк., 46 зач., IX, 37–43."}	//сб
+		std::array { ApEvReads{ 0X354, "Лк., 53 зач., X, 25–37."},	//Неделя 25
+						ApEvReads{ 0X414, "Лк., 65 зач., XII, 13–15, 22–31."},	//пн - седмица 25
+						ApEvReads{ 0X444, "Лк., 68 зач., XII, 42–48."},	//вт
+						ApEvReads{ 0X454, "Лк., 69 зач., XII, 48-59."},	//ср
+						ApEvReads{ 0X464, "Лк., 70 зач., XIII, 1–9."},	//чт
+						ApEvReads{ 0X494, "Лк., 73 зач., XIII, 31–35."},	//пт
+						ApEvReads{ 0X2E4, "Лк., 46 зач., IX, 37–43."}	//сб
 					},
-		std::array { ApEvReads{66,"Лк., 66 зач., XII, 16–21."},	//Неделя 26
-						ApEvReads{75,"Лк., 75 зач., XIV, 12–15."},	//пн - седмица 26
-						ApEvReads{77,"Лк., 77 зач., XIV, 25–35."},	//вт
-						ApEvReads{78,"Лк., 78 зач., XV, 1–10."},	//ср
-						ApEvReads{80,"Лк., 80 зач., XVI, 1-9."},	//чт
-						ApEvReads{82,"Лк., 82 зач., XVI, 15–18; XVII, 1–4."},	//пт
-						ApEvReads{49,"Лк., 49 зач., IX, 57–62."}	//сб
+		std::array { ApEvReads{ 0X424, "Лк., 66 зач., XII, 16–21."},	//Неделя 26
+						ApEvReads{ 0X4B4, "Лк., 75 зач., XIV, 12–15."},	//пн - седмица 26
+						ApEvReads{ 0X4D4, "Лк., 77 зач., XIV, 25–35."},	//вт
+						ApEvReads{ 0X4E4, "Лк., 78 зач., XV, 1–10."},	//ср
+						ApEvReads{ 0X504, "Лк., 80 зач., XVI, 1-9."},	//чт
+						ApEvReads{ 0X524, "Лк., 82 зач., XVI, 15–18; XVII, 1–4."},	//пт
+						ApEvReads{ 0X314, "Лк., 49 зач., IX, 57–62."}	//сб
 					},
-		std::array { ApEvReads{71,"Лк., 71 зач., XIII, 10–17."},	//Неделя 27
-						ApEvReads{86,"Лк., 86 зач., XVII, 20–25."},	//пн - седмица 27
-						ApEvReads{87,"Лк., 87 зач., XVII, 26–37."},	//вт
-						ApEvReads{90,"Лк., 90 зач., XVIII, 15–17, 26–30."},	//ср
-						ApEvReads{92,"Лк., 92 зач., XVIII, 31–34."},	//чт
-						ApEvReads{95,"Лк., 95 зач., XIX, 12–28."},	//пт
-						ApEvReads{51,"Лк., 51 зач., X, 16–21."}	//сб
+		std::array { ApEvReads{ 0X474, "Лк., 71 зач., XIII, 10–17."},	//Неделя 27
+						ApEvReads{ 0X564, "Лк., 86 зач., XVII, 20–25."},	//пн - седмица 27
+						ApEvReads{ 0X574, "Лк., 87 зач., XVII, 26–37."},	//вт
+						ApEvReads{ 0X5A4, "Лк., 90 зач., XVIII, 15–17, 26–30."},	//ср
+						ApEvReads{ 0X5C4, "Лк., 92 зач., XVIII, 31–34."},	//чт
+						ApEvReads{ 0X5F4, "Лк., 95 зач., XIX, 12–28."},	//пт
+						ApEvReads{ 0X334, "Лк., 51 зач., X, 16–21."}	//сб
 					},
-		std::array { ApEvReads{76,"Лк., 76 зач., XIV, 16–24."},	//Неделя 28
-						ApEvReads{97,"Лк., 97 зач., XIX, 37–44."},	//пн - седмица 28
-						ApEvReads{98,"Лк., 98 зач., XIX, 45–48."},	//вт
-						ApEvReads{99,"Лк., 99 зач., XX, 1–8."},	//ср
-						ApEvReads{100,"Лк., 100 зач., XX, 9–18."},	//чт
-						ApEvReads{101,"Лк., 101 зач., XX, 19-26."},	//пт
-						ApEvReads{67,"Лк., 67 зач., XII, 32–40."}	//сб
+		std::array { ApEvReads{ 0X4C4, "Лк., 76 зач., XIV, 16–24."},	//Неделя 28
+						ApEvReads{ 0X614, "Лк., 97 зач., XIX, 37–44."},	//пн - седмица 28
+						ApEvReads{ 0X624, "Лк., 98 зач., XIX, 45–48."},	//вт
+						ApEvReads{ 0X634, "Лк., 99 зач., XX, 1–8."},	//ср
+						ApEvReads{ 0X644, "Лк., 100 зач., XX, 9–18."},	//чт
+						ApEvReads{ 0X654, "Лк., 101 зач., XX, 19-26."},	//пт
+						ApEvReads{ 0X434, "Лк., 67 зач., XII, 32–40."}	//сб
 					},
-		std::array { ApEvReads{85,"Лк., 85 зач., XVII, 12–19."},	//Неделя 29
-						ApEvReads{102,"Лк., 102 зач., XX, 27–44."},	//пн - седмица 29
-						ApEvReads{106,"Лк., 106 зач., XXI, 12–19."},	//вт
-						ApEvReads{104,"Лк., 104 зач., XXI, 5–7, 10–11, 20–24."},	//ср
-						ApEvReads{107,"Лк., 107 зач., XXI, 28–33."},	//чт
-						ApEvReads{108,"Лк., 108 зач., XXI, 37 – XXII, 8."},	//пт
-						ApEvReads{72,"Лк., 72 зач., XIII, 18–29."}	//сб
+		std::array { ApEvReads{ 0X554, "Лк., 85 зач., XVII, 12–19."},	//Неделя 29
+						ApEvReads{ 0X664, "Лк., 102 зач., XX, 27–44."},	//пн - седмица 29
+						ApEvReads{ 0X6A4, "Лк., 106 зач., XXI, 12–19."},	//вт
+						ApEvReads{ 0X684, "Лк., 104 зач., XXI, 5–7, 10–11, 20–24."},	//ср
+						ApEvReads{ 0X6B4, "Лк., 107 зач., XXI, 28–33."},	//чт
+						ApEvReads{ 0X6C4, "Лк., 108 зач., XXI, 37 – XXII, 8."},	//пт
+						ApEvReads{ 0X484, "Лк., 72 зач., XIII, 18–29."}	//сб
 					},
-		std::array { ApEvReads{91,"Лк., 91 зач., XVIII, 18-27."},	//Неделя 30
-						ApEvReads{33,"Мк., 33 зач., VIII, 11–21."},	//пн - седмица 30
-						ApEvReads{34,"Мк., 34 зач., VIII, 22–26."},	//вт
-						ApEvReads{36,"Мк., 36 зач., VIII, 30–34."},	//ср
-						ApEvReads{39,"Мк., 39 зач., IX, 10–16."},	//чт
-						ApEvReads{41,"Мк., 41 зач., IX, 33–41."},	//пт
-						ApEvReads{74,"Лк., 74 зач., XIV, 1–11."}	//сб
+		std::array { ApEvReads{ 0X5B4, "Лк., 91 зач., XVIII, 18-27."},	//Неделя 30
+						ApEvReads{ 0X213, "Мк., 33 зач., VIII, 11–21."},	//пн - седмица 30
+						ApEvReads{ 0X223, "Мк., 34 зач., VIII, 22–26."},	//вт
+						ApEvReads{ 0X243, "Мк., 36 зач., VIII, 30–34."},	//ср
+						ApEvReads{ 0X273, "Мк., 39 зач., IX, 10–16."},	//чт
+						ApEvReads{ 0X293, "Мк., 41 зач., IX, 33–41."},	//пт
+						ApEvReads{ 0X4A4, "Лк., 74 зач., XIV, 1–11."}	//сб
 					},
-		std::array { ApEvReads{93,"Лк., 93 зач., XVIII, 35-43."},	//Неделя 31
-						ApEvReads{42,"Мк., 42 зач., IX, 42 – X, 1."},	//пн - седмица 31
-						ApEvReads{43,"Мк., 43 зач., X, 2–12."},	//вт
-						ApEvReads{44,"Мк., 44 зач., X, 11–16."},	//ср
-						ApEvReads{45,"Мк., 45 зач., X, 17–27."},	//чт
-						ApEvReads{46,"Мк., 46 зач., X, 23–32."},	//пт
-						ApEvReads{81,"Лк., 81 зач., XVI, 10–15."}	//сб
+		std::array { ApEvReads{ 0X5D4, "Лк., 93 зач., XVIII, 35-43."},	//Неделя 31
+						ApEvReads{ 0X2A3, "Мк., 42 зач., IX, 42 – X, 1."},	//пн - седмица 31
+						ApEvReads{ 0X2B3, "Мк., 43 зач., X, 2–12."},	//вт
+						ApEvReads{ 0X2C3, "Мк., 44 зач., X, 11–16."},	//ср
+						ApEvReads{ 0X2D3, "Мк., 45 зач., X, 17–27."},	//чт
+						ApEvReads{ 0X2E3, "Мк., 46 зач., X, 23–32."},	//пт
+						ApEvReads{ 0X514, "Лк., 81 зач., XVI, 10–15."}	//сб
 					},
-		std::array { ApEvReads{94,"Лк., 94 зач., XIX, 1-10."},	//Неделя 32
-						ApEvReads{48,"Мк., 48 зач., X, 46–52."},	//пн - седмица 32
-						ApEvReads{50,"Мк., 50 зач., XI, 11–23."},	//вт
-						ApEvReads{51,"Мк., 51 зач., XI, 23–26."},	//ср
-						ApEvReads{52,"Мк., 52 зач., XI, 27–33."},	//чт
-						ApEvReads{53,"Мк., 53 зач., XII, 1–12."},	//пт
-						ApEvReads{84,"Лк., 84 зач., XVII, 3–10."}	//сб
+		std::array { ApEvReads{ 0X5E4, "Лк., 94 зач., XIX, 1-10."},	//Неделя 32
+						ApEvReads{ 0X303, "Мк., 48 зач., X, 46–52."},	//пн - седмица 32
+						ApEvReads{ 0X323, "Мк., 50 зач., XI, 11–23."},	//вт
+						ApEvReads{ 0X333, "Мк., 51 зач., XI, 23–26."},	//ср
+						ApEvReads{ 0X343, "Мк., 52 зач., XI, 27–33."},	//чт
+						ApEvReads{ 0X353, "Мк., 53 зач., XII, 1–12."},	//пт
+						ApEvReads{ 0X544, "Лк., 84 зач., XVII, 3–10."}	//сб
 					},
-		std::array { ApEvReads{89,"Лк., 89 зач., XVIII, 10–14."},	//Неделя 33 о мытари и фарисеи
-						ApEvReads{54,"Мк., 54 зач., XII, 13–17."},	//пн - седмица 33
-						ApEvReads{55,"Мк., 55 зач., XII, 18–27."},	//вт
-						ApEvReads{56,"Мк., 56 зач., XII, 28–37."},	//ср
-						ApEvReads{57,"Мк., 57 зач., XII, 38–44."},	//чт
-						ApEvReads{58,"Мк., 58 зач., XIII, 1–8."},	//пт
-						ApEvReads{88,"Лк., 88 зач., XVIII, 2–8."}	//сб
+		std::array { ApEvReads{ 0X594, "Лк., 89 зач., XVIII, 10–14."},	//Неделя 33 о мытари и фарисеи
+						ApEvReads{ 0X363, "Мк., 54 зач., XII, 13–17."},	//пн - седмица 33
+						ApEvReads{ 0X373, "Мк., 55 зач., XII, 18–27."},	//вт
+						ApEvReads{ 0X383, "Мк., 56 зач., XII, 28–37."},	//ср
+						ApEvReads{ 0X393, "Мк., 57 зач., XII, 38–44."},	//чт
+						ApEvReads{ 0X3A3, "Мк., 58 зач., XIII, 1–8."},	//пт
+						ApEvReads{ 0X584, "Лк., 88 зач., XVIII, 2–8."}	//сб
 					},
-		std::array { ApEvReads{79,"Лк., 79 зач., XV, 11–32."},	//Неделя 34 о блуднем сыне
-						ApEvReads{59,"Мк., 59 зач., XIII, 9–13."},	//пн - седмица 34
-						ApEvReads{60,"Мк., 60 зач., XIII, 14-23."},	//вт
-						ApEvReads{61,"Мк., 61 зач., XIII, 24–31."},	//ср
-						ApEvReads{62,"Мк., 62 зач., XIII, 31 – XIV, 2."},	//чт
-						ApEvReads{63,"Мк., 63 зач., XIV, 3-9."},	//пт
-						ApEvReads{103,"Лк., 103 зач., XX, 45 – XXI, 4."}	//сб
+		std::array { ApEvReads{ 0X4F4, "Лк., 79 зач., XV, 11–32."},	//Неделя 34 о блуднем сыне
+						ApEvReads{ 0X3B3, "Мк., 59 зач., XIII, 9–13."},	//пн - седмица 34
+						ApEvReads{ 0X3C3, "Мк., 60 зач., XIII, 14-23."},	//вт
+						ApEvReads{ 0X3D3, "Мк., 61 зач., XIII, 24–31."},	//ср
+						ApEvReads{ 0X3E3, "Мк., 62 зач., XIII, 31 – XIV, 2."},	//чт
+						ApEvReads{ 0X3F3, "Мк., 63 зач., XIV, 3-9."},	//пт
+						ApEvReads{ 0X674, "Лк., 103 зач., XX, 45 – XXI, 4."}	//сб
 					},
-		std::array { ApEvReads{106,"Мф., 106 зач., XXV, 31–46."},	//Неделя 35 мясопустная
-						ApEvReads{49,"Мк., 49 зач., XI, 1–11."},	//пн - седмица 35
-						ApEvReads{64,"Мк., 64 зач., XIV, 10–42."},	//вт
-						ApEvReads{65,"Мк., 65 зач., XIV, 43 – XV, 1."},	//ср
-						ApEvReads{66,"Мк., 66 зач., XV, 1–15."},	//чт
-						ApEvReads{68,"Мк., 68 зач., XV, 22, 25, 33–41."},	//пт
-						ApEvReads{105,"Лк., 105 зач., XXI, 8–9, 25–27, 33–36."}	//сб
+		std::array { ApEvReads{ 0X6A2, "Мф., 106 зач., XXV, 31–46."},	//Неделя 35 мясопустная
+						ApEvReads{ 0X313, "Мк., 49 зач., XI, 1–11."},	//пн - седмица 35
+						ApEvReads{ 0X403, "Мк., 64 зач., XIV, 10–42."},	//вт
+						ApEvReads{ 0X413, "Мк., 65 зач., XIV, 43 – XV, 1."},	//ср
+						ApEvReads{ 0X423, "Мк., 66 зач., XV, 1–15."},	//чт
+						ApEvReads{ 0X443, "Мк., 68 зач., XV, 22, 25, 33–41."},	//пт
+						ApEvReads{ 0X694, "Лк., 105 зач., XXI, 8–9, 25–27, 33–36."}	//сб
 					},
-		std::array { ApEvReads{ 17,"Мф., 17 зач., VI, 14–21."},	//Неделя 36 сыропустная
-						ApEvReads{ 96,"Лк., 96 зач., XIX, 29–40; XXII, 7–39."},	//пн - седмица 36
-						ApEvReads{109,"Лк., 109 зач., XXII, 39–42, 45 – XXIII, 1."},	//вт
+		std::array { ApEvReads{ 0X112, "Мф., 17 зач., VI, 14–21."},	//Неделя 36 сыропустная
+						ApEvReads{ 0X604, "Лк., 96 зач., XIX, 29–40; XXII, 7–39."},	//пн - седмица 36
+						ApEvReads{ 0X6D4, "Лк., 109 зач., XXII, 39–42, 45 – XXIII, 1."},	//вт
 						ApEvReads{},	//ср
-						ApEvReads{110,"Лк., 110 зач., XXIII, 1–34, 44–56."},	//чт
+						ApEvReads{ 0X6E4, "Лк., 110 зач., XXIII, 1–34, 44–56."},	//чт
 						ApEvReads{},	//пт
-						ApEvReads{ 16,"Мф., 16 зач., VI, 1–13."}	//сб
+						ApEvReads{ 0X102, "Мф., 16 зач., VI, 1–13."}	//сб
 					}
 	};
 	auto evangelie_table1_get_chteniya = [](int8_t n50, int8_t dn)->ApEvReads {
@@ -595,7 +697,7 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 	//таблица рядовых чтений на литургии из приложения богосл.апостола. период от св. троицы до нед. сыропустная
 	//двумерный массив [a][b], где а - календарный номер по пятидесятнице. b - деньнедели.
 	static const TT1 apostol_table_1 {
-		std::array { ApEvReads{ 3,"Деян., 3 зач., II, 1–11."},	//неделя 0. день св. троицы
+		std::array { ApEvReads{ 0X31, "Деян., 3 зач., II, 1–11."},	//неделя 0. день св. троицы
 						ApEvReads{},
 						ApEvReads{},
 						ApEvReads{},
@@ -603,293 +705,293 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 						ApEvReads{},
 						ApEvReads{}
 					},
-		std::array { ApEvReads{330,"Евр., 330 зач., XI, 33 – XII, 2."},	//Неделя 1 всех святых
-						ApEvReads{229,"Еф., 229 зач., V, 8–19."},	//пн - Святаго Духа
-						ApEvReads{79,"Рим., 79 зач., I, 1–7, 13–17."},	//вт - седмица 1
-						ApEvReads{80,"Рим., 80 зач., I, 18–27."},	//ср
-						ApEvReads{81,"Рим., 81 зач., I, 28 – II, 9."},	//чт
-						ApEvReads{82,"Рим., 82 зач., II, 14–29."},	//пт
-						ApEvReads{79,"Рим., 79 зач., I, 7-12."}	//сб
+		std::array { ApEvReads{ 0X14A1, "Евр., 330 зач., XI, 33 – XII, 2."},	//Неделя 1 всех святых
+						ApEvReads{ 0XE51, "Еф., 229 зач., V, 8–19."},	//пн - Святаго Духа
+						ApEvReads{ 0X4F1, "Рим., 79 зач., I, 1–7, 13–17."},	//вт - седмица 1
+						ApEvReads{ 0X501, "Рим., 80 зач., I, 18–27."},	//ср
+						ApEvReads{ 0X511, "Рим., 81 зач., I, 28 – II, 9."},	//чт
+						ApEvReads{ 0X521, "Рим., 82 зач., II, 14–29."},	//пт
+						ApEvReads{ 0X4F1, "Рим., 79 зач., I, 7-12."}	//сб
 					},
-		std::array { ApEvReads{81,"Рим., 81 зач., II, 10-16."},	//Неделя 2
-						ApEvReads{83,"Рим., 83 зач., II, 28 – III, 18."},	//пн - седмица 2
-						ApEvReads{86,"Рим., 86 зач., IV, 4–12."},	//вт
-						ApEvReads{87,"Рим., 87 зач., IV, 13–25."},	//ср
-						ApEvReads{89,"Рим., 89 зач., V, 10–16."},	//чт
-						ApEvReads{90,"Рим., 90 зач., V, 17 – VI, 2."},	//пт
-						ApEvReads{84,"Рим., 84 зач., III, 19–26."}	//сб
+		std::array { ApEvReads{ 0X511, "Рим., 81 зач., II, 10-16."},	//Неделя 2
+						ApEvReads{ 0X531, "Рим., 83 зач., II, 28 – III, 18."},	//пн - седмица 2
+						ApEvReads{ 0X561, "Рим., 86 зач., IV, 4–12."},	//вт
+						ApEvReads{ 0X571, "Рим., 87 зач., IV, 13–25."},	//ср
+						ApEvReads{ 0X591, "Рим., 89 зач., V, 10–16."},	//чт
+						ApEvReads{ 0X5A1, "Рим., 90 зач., V, 17 – VI, 2."},	//пт
+						ApEvReads{ 0X541, "Рим., 84 зач., III, 19–26."}	//сб
 					},
-		std::array { ApEvReads{88,"Рим., 88 зач., V, 1–10."},	//Неделя 3
-						ApEvReads{94,"Рим., 94 зач., VII, 1–13."},	//пн - седмица 3
-						ApEvReads{95,"Рим., 95 зач., VII, 14 – VIII, 2."},	//вт
-						ApEvReads{96,"Рим., 96 зач., VIII, 2–13."},//ср
-						ApEvReads{98,"Рим., 98 зач., VIII, 22–27."},	//чт
-						ApEvReads{101,"Рим., 101 зач., IX, 6–19."},	//пт
-						ApEvReads{85,"Рим., 85 зач., III, 28 – IV, 3."}	//сб
+		std::array { ApEvReads{ 0X581, "Рим., 88 зач., V, 1–10."},	//Неделя 3
+						ApEvReads{ 0X5E1, "Рим., 94 зач., VII, 1–13."},	//пн - седмица 3
+						ApEvReads{ 0X5F1, "Рим., 95 зач., VII, 14 – VIII, 2."},	//вт
+						ApEvReads{ 0X601, "Рим., 96 зач., VIII, 2–13."},//ср
+						ApEvReads{ 0X621, "Рим., 98 зач., VIII, 22–27."},	//чт
+						ApEvReads{ 0X651, "Рим., 101 зач., IX, 6–19."},	//пт
+						ApEvReads{ 0X551, "Рим., 85 зач., III, 28 – IV, 3."}	//сб
 					},
-		std::array { ApEvReads{93,"Рим., 93 зач., VI, 18-23."},	//Неделя 4
-						ApEvReads{102,"Рим., 102 зач., IX, 18–33."},	//пн - седмица 4
-						ApEvReads{104,"Рим., 104 зач., X, 11 – XI, 2."},	//вт
-						ApEvReads{105,"Рим., 105 зач., XI, 2–12."},	//ср
-						ApEvReads{106,"Рим., 106 зач., XI, 13–24."},	//чт
-						ApEvReads{107,"Рим., 107 зач., XI, 25–36."},	//пт
-						ApEvReads{ 92,"Рим., 92 зач., VI, 11–17."}	//сб
+		std::array { ApEvReads{ 0X5D1, "Рим., 93 зач., VI, 18-23."},	//Неделя 4
+						ApEvReads{ 0X661, "Рим., 102 зач., IX, 18–33."},	//пн - седмица 4
+						ApEvReads{ 0X681, "Рим., 104 зач., X, 11 – XI, 2."},	//вт
+						ApEvReads{ 0X691, "Рим., 105 зач., XI, 2–12."},	//ср
+						ApEvReads{ 0X6A1, "Рим., 106 зач., XI, 13–24."},	//чт
+						ApEvReads{ 0X6B1, "Рим., 107 зач., XI, 25–36."},	//пт
+						ApEvReads{ 0X5C1, "Рим., 92 зач., VI, 11–17."}	//сб
 					},
-		std::array { ApEvReads{103,"Рим., 103 зач., X, 1–10."},	//Неделя 5
-						ApEvReads{109,"Рим., 109 зач., XII, 4–5, 15–21."},	//пн - седмица 5
-						ApEvReads{114,"Рим., 114 зач., XIV, 9–18."},	//вт
-						ApEvReads{117,"Рим., 117 зач., XV, 7–16."},	//ср
-						ApEvReads{118,"Рим., 118 зач., XV, 17–29."},	//чт
-						ApEvReads{120,"Рим., 120 зач., XVI, 1–16."},	//пт
-						ApEvReads{ 97,"Рим., 97 зач., VIII, 14–21."}	//сб
+		std::array { ApEvReads{ 0X671, "Рим., 103 зач., X, 1–10."},	//Неделя 5
+						ApEvReads{ 0X6D1, "Рим., 109 зач., XII, 4–5, 15–21."},	//пн - седмица 5
+						ApEvReads{ 0X721, "Рим., 114 зач., XIV, 9–18."},	//вт
+						ApEvReads{ 0X751, "Рим., 117 зач., XV, 7–16."},	//ср
+						ApEvReads{ 0X761, "Рим., 118 зач., XV, 17–29."},	//чт
+						ApEvReads{ 0X781, "Рим., 120 зач., XVI, 1–16."},	//пт
+						ApEvReads{ 0X611, "Рим., 97 зач., VIII, 14–21."}	//сб
 					},
-		std::array { ApEvReads{110,"Рим., 110 зач., XII, 6–14."},	//Неделя 6
-						ApEvReads{121,"Рим., 121 зач., XVI, 17–24."},	//пн - седмица 6
-						ApEvReads{122,"1 Кор., 122 зач., I, 1–9."},	//вт
-						ApEvReads{127,"1 Кор., 127 зач., II, 9 – III, 8."},	//ср
-						ApEvReads{129,"1 Кор., 129 зач., III, 18–23."},	//чт
-						ApEvReads{130,"1 Кор., 130 зач., IV, 5-8."},	//пт
-						ApEvReads{100,"Рим., 100 зач., IX, 1–5."}	//сб
+		std::array { ApEvReads{ 0X6E1, "Рим., 110 зач., XII, 6–14."},	//Неделя 6
+						ApEvReads{ 0X791, "Рим., 121 зач., XVI, 17–24."},	//пн - седмица 6
+						ApEvReads{ 0X7A1, "1 Кор., 122 зач., I, 1–9."},	//вт
+						ApEvReads{ 0X7F1, "1 Кор., 127 зач., II, 9 – III, 8."},	//ср
+						ApEvReads{ 0X811, "1 Кор., 129 зач., III, 18–23."},	//чт
+						ApEvReads{ 0X821, "1 Кор., 130 зач., IV, 5-8."},	//пт
+						ApEvReads{ 0X641, "Рим., 100 зач., IX, 1–5."}	//сб
 					},
-		std::array { ApEvReads{116,"Рим., 116 зач., XV, 1–7."},	//Неделя 7
-						ApEvReads{134,"1 Кор., 134 зач., V, 9 – VI, 11."},	//пн - седмица 7
-						ApEvReads{136,"1 Кор., 136 зач., VI, 20 – VII, 12."},	//вт
-						ApEvReads{137,"1 Кор., 137 зач., VII, 12–24."},	//ср
-						ApEvReads{138,"1 Кор., 138 зач., VII, 24–35."},	//чт
-						ApEvReads{139,"1 Кор., 139 зач., VII, 35 – VIII, 7."},	//пт
-						ApEvReads{108,"Рим., 108 зач., XII, 1–3."}	//сб
+		std::array { ApEvReads{ 0X741, "Рим., 116 зач., XV, 1–7."},	//Неделя 7
+						ApEvReads{ 0X861, "1 Кор., 134 зач., V, 9 – VI, 11."},	//пн - седмица 7
+						ApEvReads{ 0X881, "1 Кор., 136 зач., VI, 20 – VII, 12."},	//вт
+						ApEvReads{ 0X891, "1 Кор., 137 зач., VII, 12–24."},	//ср
+						ApEvReads{ 0X8A1, "1 Кор., 138 зач., VII, 24–35."},	//чт
+						ApEvReads{ 0X8B1, "1 Кор., 139 зач., VII, 35 – VIII, 7."},	//пт
+						ApEvReads{ 0X6C1, "Рим., 108 зач., XII, 1–3."}	//сб
 					},
-		std::array { ApEvReads{124,"1 Кор., 124 зач., I, 10–18."},	//Неделя 8
-						ApEvReads{142,"1 Кор., 142 зач., IX, 13–18."},	//пн - седмица 8
-						ApEvReads{144,"1 Кор., 144 зач., X, 5–12."},	//вт
-						ApEvReads{145,"1 Кор., 145 зач., X, 12–22."},	//ср
-						ApEvReads{147,"1 Кор., 147 зач., X, 28 – XI, 7."},	//чт
-						ApEvReads{148,"1 Кор., 148 зач., XI, 8–22."},	//пт
-						ApEvReads{111,"Рим., 111 зач., XIII, 1–10."}	//сб
+		std::array { ApEvReads{ 0X7C1, "1 Кор., 124 зач., I, 10–18."},	//Неделя 8
+						ApEvReads{ 0X8E1, "1 Кор., 142 зач., IX, 13–18."},	//пн - седмица 8
+						ApEvReads{ 0X901, "1 Кор., 144 зач., X, 5–12."},	//вт
+						ApEvReads{ 0X911, "1 Кор., 145 зач., X, 12–22."},	//ср
+						ApEvReads{ 0X931, "1 Кор., 147 зач., X, 28 – XI, 7."},	//чт
+						ApEvReads{ 0X941, "1 Кор., 148 зач., XI, 8–22."},	//пт
+						ApEvReads{ 0X6F1, "Рим., 111 зач., XIII, 1–10."}	//сб
 					},
-		std::array { ApEvReads{128,"1 Кор., 128 зач., III, 9–17."},	//Неделя 9
-						ApEvReads{150,"1 Кор., 150 зач., XI, 31 – XII, 6."},	//пн - седмица 9
-						ApEvReads{152,"1 Кор., 152 зач., XII, 12–26."},	//вт
-						ApEvReads{154,"1 Кор., 154 зач., XIII, 4 – XIV, 5."},//ср
-						ApEvReads{155,"1 Кор., 155 зач., XIV, 6–19."},	//чт
-						ApEvReads{157,"1 Кор., 157 зач., XIV, 26–40."},	//пт
-						ApEvReads{113,"Рим., 113 зач., XIV, 6–9."}	//сб
+		std::array { ApEvReads{ 0X801, "1 Кор., 128 зач., III, 9–17."},	//Неделя 9
+						ApEvReads{ 0X961, "1 Кор., 150 зач., XI, 31 – XII, 6."},	//пн - седмица 9
+						ApEvReads{ 0X981, "1 Кор., 152 зач., XII, 12–26."},	//вт
+						ApEvReads{ 0X9A1, "1 Кор., 154 зач., XIII, 4 – XIV, 5."},//ср
+						ApEvReads{ 0X9B1, "1 Кор., 155 зач., XIV, 6–19."},	//чт
+						ApEvReads{ 0X9D1, "1 Кор., 157 зач., XIV, 26–40."},	//пт
+						ApEvReads{ 0X711, "Рим., 113 зач., XIV, 6–9."}	//сб
 					},
-		std::array { ApEvReads{131,"1 Кор., 131 зач., IV, 9–16."},	//Неделя 10
-						ApEvReads{159,"1 Кор., 159 зач., XV, 12–19."},	//пн - седмица 10
-						ApEvReads{161,"1 Кор., 161 зач., XV, 29–38."},	//вт
-						ApEvReads{165,"1 Кор., 165 зач., XVI, 4–12."},	//ср
-						ApEvReads{167,"2 Кор., 167 зач., I, 1–7."},//чт
-						ApEvReads{169,"2 Кор., 169 зач., I, 12–20."},	//пт
-						ApEvReads{119,"Рим., 119 зач., XV, 30–33."}	//сб
+		std::array { ApEvReads{ 0X831, "1 Кор., 131 зач., IV, 9–16."},	//Неделя 10
+						ApEvReads{ 0X9F1, "1 Кор., 159 зач., XV, 12–19."},	//пн - седмица 10
+						ApEvReads{ 0XA11, "1 Кор., 161 зач., XV, 29–38."},	//вт
+						ApEvReads{ 0XA51, "1 Кор., 165 зач., XVI, 4–12."},	//ср
+						ApEvReads{ 0XA71, "2 Кор., 167 зач., I, 1–7."},//чт
+						ApEvReads{ 0XA91, "2 Кор., 169 зач., I, 12–20."},	//пт
+						ApEvReads{ 0X771, "Рим., 119 зач., XV, 30–33."}	//сб
 					},
-		std::array { ApEvReads{141,"1 Кор., 141 зач., IX, 2–12."},	//Неделя 11
-						ApEvReads{171,"2 Кор., 171 зач., II, 3–15."},	//пн - седмица 11
-						ApEvReads{172,"2 Кор., 172 зач., II, 14 – III, 3."},	//вт
-						ApEvReads{173,"2 Кор., 173 зач., III, 4–11."},	//ср
-						ApEvReads{175,"2 Кор., 175 зач., IV, 1–6."},	//чт
-						ApEvReads{177,"2 Кор., 177 зач., IV, 13–18."},	//пт
-						ApEvReads{123,"1 Кор., 123 зач., I, 3–9."}	//сб
+		std::array { ApEvReads{ 0X8D1, "1 Кор., 141 зач., IX, 2–12."},	//Неделя 11
+						ApEvReads{ 0XAB1, "2 Кор., 171 зач., II, 3–15."},	//пн - седмица 11
+						ApEvReads{ 0XAC1, "2 Кор., 172 зач., II, 14 – III, 3."},	//вт
+						ApEvReads{ 0XAD1, "2 Кор., 173 зач., III, 4–11."},	//ср
+						ApEvReads{ 0XAF1, "2 Кор., 175 зач., IV, 1–6."},	//чт
+						ApEvReads{ 0XB11, "2 Кор., 177 зач., IV, 13–18."},	//пт
+						ApEvReads{ 0X7B1, "1 Кор., 123 зач., I, 3–9."}	//сб
 					},
-		std::array { ApEvReads{158,"1 Кор., 158 зач., XV, 1-11."},	//Неделя 12
-						ApEvReads{179,"2 Кор., 179 зач., V, 10–15."},	//пн - седмица 12
-						ApEvReads{180,"2 Кор., 180 зач., V, 15–21."},	//вт
-						ApEvReads{182,"2 Кор., 182 зач., VI, 11–16."},	//ср
-						ApEvReads{183,"2 Кор., 183 зач., VII, 1–10."},	//чт
-						ApEvReads{184,"2 Кор., 184 зач., VII, 10–16."},	//пт
-						ApEvReads{125,"1 Кор., 125 зач., I, 18-24."}	//сб
+		std::array { ApEvReads{ 0X9E1, "1 Кор., 158 зач., XV, 1-11."},	//Неделя 12
+						ApEvReads{ 0XB31, "2 Кор., 179 зач., V, 10–15."},	//пн - седмица 12
+						ApEvReads{ 0XB41, "2 Кор., 180 зач., V, 15–21."},	//вт
+						ApEvReads{ 0XB61, "2 Кор., 182 зач., VI, 11–16."},	//ср
+						ApEvReads{ 0XB71, "2 Кор., 183 зач., VII, 1–10."},	//чт
+						ApEvReads{ 0XB81, "2 Кор., 184 зач., VII, 10–16."},	//пт
+						ApEvReads{ 0X7D1, "1 Кор., 125 зач., I, 18-24."}	//сб
 					},
-		std::array { ApEvReads{166,"1 Кор., 166 зач., XVI, 13–24."},	//Неделя 13
-						ApEvReads{186,"2 Кор., 186 зач., VIII, 7–15."},	//пн - седмица 13
-						ApEvReads{187,"2 Кор., 187 зач., VIII, 16 – IX, 5."},	//вт
-						ApEvReads{189,"2 Кор., 189 зач., IX, 12 – X, 7."},	//ср
-						ApEvReads{190,"2 Кор., 190 зач., X, 7–18."},	//чт
-						ApEvReads{192,"2 Кор., 192 зач., XI, 5–21."},	//пт
-						ApEvReads{126,"1 Кор., 126 зач., II, 6–9."}	//сб
+		std::array { ApEvReads{ 0XA61, "1 Кор., 166 зач., XVI, 13–24."},	//Неделя 13
+						ApEvReads{ 0XBA1, "2 Кор., 186 зач., VIII, 7–15."},	//пн - седмица 13
+						ApEvReads{ 0XBB1, "2 Кор., 187 зач., VIII, 16 – IX, 5."},	//вт
+						ApEvReads{ 0XBD1, "2 Кор., 189 зач., IX, 12 – X, 7."},	//ср
+						ApEvReads{ 0XBE1, "2 Кор., 190 зач., X, 7–18."},	//чт
+						ApEvReads{ 0XC01, "2 Кор., 192 зач., XI, 5–21."},	//пт
+						ApEvReads{ 0X7E1, "1 Кор., 126 зач., II, 6–9."}	//сб
 					},
-		std::array { ApEvReads{170,"2 Кор., 170 зач., I, 21 – II, 4."},	//Неделя 14
-						ApEvReads{195,"2 Кор., 195 зач., XII, 10–19."},	//пн - седмица 14
-						ApEvReads{196,"2 Кор., 196 зач., XII, 20 – XIII, 2."},	//вт
-						ApEvReads{197,"2 Кор., 197 зач., XIII, 3–13."},	//ср
-						ApEvReads{198,"Гал., 198 зач., I, 1–10, 20 – II, 5."},	//чт
-						ApEvReads{201,"Гал., 201 зач., II, 6–10."},	//пт
-						ApEvReads{130,"1 Кор., 130 зач., IV, 1–5."}	//сб
+		std::array { ApEvReads{ 0XAA1, "2 Кор., 170 зач., I, 21 – II, 4."},	//Неделя 14
+						ApEvReads{ 0XC31, "2 Кор., 195 зач., XII, 10–19."},	//пн - седмица 14
+						ApEvReads{ 0XC41, "2 Кор., 196 зач., XII, 20 – XIII, 2."},	//вт
+						ApEvReads{ 0XC51, "2 Кор., 197 зач., XIII, 3–13."},	//ср
+						ApEvReads{ 0XC61, "Гал., 198 зач., I, 1–10, 20 – II, 5."},	//чт
+						ApEvReads{ 0XC91, "Гал., 201 зач., II, 6–10."},	//пт
+						ApEvReads{ 0X821, "1 Кор., 130 зач., IV, 1–5."}	//сб
 					},
-		std::array { ApEvReads{176,"2 Кор., 176 зач., IV, 6–15."},	//Неделя 15
-						ApEvReads{202,"Гал., 202 зач., II, 11–16."},	//пн - седмица 15
-						ApEvReads{204,"Гал., 204 зач., II, 21 – III, 7."},	//вт
-						ApEvReads{207,"Гал., 207 зач., III, 15–22."},	//ср
-						ApEvReads{208,"Гал., 208 зач., III, 23 - IV, 5."},	//чт
-						ApEvReads{210,"Гал., 210 зач., IV, 8–21."},	//пт
-						ApEvReads{132,"1 Кор., 132 зач., IV, 17 – V, 5."}	//сб
+		std::array { ApEvReads{ 0XB01, "2 Кор., 176 зач., IV, 6–15."},	//Неделя 15
+						ApEvReads{ 0XCA1, "Гал., 202 зач., II, 11–16."},	//пн - седмица 15
+						ApEvReads{ 0XCC1, "Гал., 204 зач., II, 21 – III, 7."},	//вт
+						ApEvReads{ 0XCF1, "Гал., 207 зач., III, 15–22."},	//ср
+						ApEvReads{ 0XD01, "Гал., 208 зач., III, 23 - IV, 5."},	//чт
+						ApEvReads{ 0XD21, "Гал., 210 зач., IV, 8–21."},	//пт
+						ApEvReads{ 0X841, "1 Кор., 132 зач., IV, 17 – V, 5."}	//сб
 					},
-		std::array { ApEvReads{181,"2 Кор., 181 зач., VI, 1–10."},	//Неделя 16
-						ApEvReads{211,"Гал., 211 зач., IV, 28 – V, 10."},	//пн - седмица 16
-						ApEvReads{212,"Гал., 212 зач., V, 11–21."},	//вт
-						ApEvReads{214,"Гал., 214 зач., VI, 2–10."},	//ср
-						ApEvReads{216,"Еф., 216 зач., I, 1–9."},	//чт
-						ApEvReads{217,"Еф., 217 зач., I, 7–17."},	//пт
-						ApEvReads{146,"1 Кор., 146 зач., X, 23–28."}	//сб
+		std::array { ApEvReads{ 0XB51, "2 Кор., 181 зач., VI, 1–10."},	//Неделя 16
+						ApEvReads{ 0XD31, "Гал., 211 зач., IV, 28 – V, 10."},	//пн - седмица 16
+						ApEvReads{ 0XD41, "Гал., 212 зач., V, 11–21."},	//вт
+						ApEvReads{ 0XD61, "Гал., 214 зач., VI, 2–10."},	//ср
+						ApEvReads{ 0XD81, "Еф., 216 зач., I, 1–9."},	//чт
+						ApEvReads{ 0XD91, "Еф., 217 зач., I, 7–17."},	//пт
+						ApEvReads{ 0X921, "1 Кор., 146 зач., X, 23–28."}	//сб
 					},
-		std::array { ApEvReads{182,"2 Кор., 182 зач., VI, 16 - VII, 1."},//Неделя 17
-						ApEvReads{219,"Еф., 219 зач., I, 22 – II, 3."},	//пн - седмица 17
-						ApEvReads{222,"Еф., 222 зач., II, 19 – III, 7."},	//вт
-						ApEvReads{223,"Еф., 223 зач., III, 8–21."},	//ср
-						ApEvReads{225,"Еф., 225 зач., IV, 14–19."},	//чт
-						ApEvReads{226,"Еф., 226 зач., IV, 17–25."},	//пт
-						ApEvReads{156,"1 Кор., 156 зач., XIV, 20–25."}	//сб
+		std::array { ApEvReads{ 0XB61, "2 Кор., 182 зач., VI, 16 - VII, 1."},//Неделя 17
+						ApEvReads{ 0XDB1, "Еф., 219 зач., I, 22 – II, 3."},	//пн - седмица 17
+						ApEvReads{ 0XDE1, "Еф., 222 зач., II, 19 – III, 7."},	//вт
+						ApEvReads{ 0XDF1, "Еф., 223 зач., III, 8–21."},	//ср
+						ApEvReads{ 0XE11, "Еф., 225 зач., IV, 14–19."},	//чт
+						ApEvReads{ 0XE21, "Еф., 226 зач., IV, 17–25."},	//пт
+						ApEvReads{ 0X9C1, "1 Кор., 156 зач., XIV, 20–25."}	//сб
 					},
-		std::array { ApEvReads{188,"2 Кор., 188 зач., IX, 6–11."},	//Неделя 18
-						ApEvReads{227,"Еф., 227 зач., IV, 25–32."},	//пн - седмица 18
-						ApEvReads{230,"Еф., 230 зач., V, 20–26."},	//вт
-						ApEvReads{231,"Еф., 231 зач., V, 25–33."},	//ср
-						ApEvReads{232,"Еф., 232 зач., V, 33 – VI, 9."},	//чт
-						ApEvReads{234,"Еф., 234 зач., VI, 18–24."},	//пт
-						ApEvReads{162,"1 Кор., 162 зач., XV, 39–45."}	//сб
+		std::array { ApEvReads{ 0XBC1, "2 Кор., 188 зач., IX, 6–11."},	//Неделя 18
+						ApEvReads{ 0XE31, "Еф., 227 зач., IV, 25–32."},	//пн - седмица 18
+						ApEvReads{ 0XE61, "Еф., 230 зач., V, 20–26."},	//вт
+						ApEvReads{ 0XE71, "Еф., 231 зач., V, 25–33."},	//ср
+						ApEvReads{ 0XE81, "Еф., 232 зач., V, 33 – VI, 9."},	//чт
+						ApEvReads{ 0XEA1, "Еф., 234 зач., VI, 18–24."},	//пт
+						ApEvReads{ 0XA21, "1 Кор., 162 зач., XV, 39–45."}	//сб
 					},
-		std::array { ApEvReads{194,"2 Кор., 194 зач., XI, 31 – XII, 9."},	//Неделя 19
-						ApEvReads{235,"Флп., 235 зач., I, 1–7."},	//пн - седмица 19
-						ApEvReads{236,"Флп., 236 зач., I, 8–14."},	//вт
-						ApEvReads{237,"Флп., 237 зач., I, 12–20."},	//ср
-						ApEvReads{238,"Флп., 238 зач., I, 20–27."},	//чт
-						ApEvReads{239,"Флп., 239 зач., I, 27 – II, 4."},	//пт
-						ApEvReads{164,"1 Кор., 164 зач., XV, 58 – XVI, 3."}	//сб
+		std::array { ApEvReads{ 0XC21, "2 Кор., 194 зач., XI, 31 – XII, 9."},	//Неделя 19
+						ApEvReads{ 0XEB1, "Флп., 235 зач., I, 1–7."},	//пн - седмица 19
+						ApEvReads{ 0XEC1, "Флп., 236 зач., I, 8–14."},	//вт
+						ApEvReads{ 0XED1, "Флп., 237 зач., I, 12–20."},	//ср
+						ApEvReads{ 0XEE1, "Флп., 238 зач., I, 20–27."},	//чт
+						ApEvReads{ 0XEF1, "Флп., 239 зач., I, 27 – II, 4."},	//пт
+						ApEvReads{ 0XA41, "1 Кор., 164 зач., XV, 58 – XVI, 3."}	//сб
 					},
-		std::array { ApEvReads{200,"Гал., 200 зач., I, 11–19."},	//Неделя 20
-						ApEvReads{241,"Флп., 241 зач., II, 12–16."},	//пн - седмица 20
-						ApEvReads{242,"Флп., 242 зач., II, 16–23."},	//вт
-						ApEvReads{243,"Флп., 243 зач., II, 24–30."},	//ср
-						ApEvReads{244,"Флп., 244 зач., III, 1–8."},	//чт
-						ApEvReads{245,"Флп., 245 зач., III, 8–19."},	//пт
-						ApEvReads{168,"2 Кор., 168 зач., I, 8–11."}	//сб
+		std::array { ApEvReads{ 0XC81, "Гал., 200 зач., I, 11–19."},	//Неделя 20
+						ApEvReads{ 0XF11, "Флп., 241 зач., II, 12–16."},	//пн - седмица 20
+						ApEvReads{ 0XF21, "Флп., 242 зач., II, 16–23."},	//вт
+						ApEvReads{ 0XF31, "Флп., 243 зач., II, 24–30."},	//ср
+						ApEvReads{ 0XF41, "Флп., 244 зач., III, 1–8."},	//чт
+						ApEvReads{ 0XF51, "Флп., 245 зач., III, 8–19."},	//пт
+						ApEvReads{ 0XA81, "2 Кор., 168 зач., I, 8–11."}	//сб
 					},
-		std::array { ApEvReads{203,"Гал., 203 зач., II, 16–20."},	//Неделя 21
-						ApEvReads{248,"Флп., 248 зач., IV, 10–23."},	//пн - седмица 21
-						ApEvReads{249,"Кол., 249 зач., I, 1–2, 7–11."},	//вт
-						ApEvReads{251,"Кол., 251 зач., I, 18–23."},	//ср
-						ApEvReads{252,"Кол., 252 зач., I, 24–29."},	//чт
-						ApEvReads{253,"Кол., 253 зач., II, 1–7."},	//пт
-						ApEvReads{174,"2 Кор., 174 зач., III, 12–18."}	//сб
+		std::array { ApEvReads{ 0XCB1, "Гал., 203 зач., II, 16–20."},	//Неделя 21
+						ApEvReads{ 0XF81, "Флп., 248 зач., IV, 10–23."},	//пн - седмица 21
+						ApEvReads{ 0XF91, "Кол., 249 зач., I, 1–2, 7–11."},	//вт
+						ApEvReads{ 0XFB1, "Кол., 251 зач., I, 18–23."},	//ср
+						ApEvReads{ 0XFC1, "Кол., 252 зач., I, 24–29."},	//чт
+						ApEvReads{ 0XFD1, "Кол., 253 зач., II, 1–7."},	//пт
+						ApEvReads{ 0XAE1, "2 Кор., 174 зач., III, 12–18."}	//сб
 					},
-		std::array { ApEvReads{215,"Гал., 215 зач., VI, 11–18."},	//Неделя 22
-						ApEvReads{255,"Кол., 255 зач., II, 13–20."},	//пн - седмица 22
-						ApEvReads{256,"Кол., 256 зач., II, 20 – III, 3."},	//вт
-						ApEvReads{259,"Кол., 259 зач., III, 17 – IV, 1."},	//ср
-						ApEvReads{260,"Кол., 260 зач., IV, 2–9."},	//чт
-						ApEvReads{261,"Кол., 261 зач., IV, 10–18."},	//пт
-						ApEvReads{178,"2 Кор., 178 зач., V, 1–10."}	//сб
+		std::array { ApEvReads{ 0XD71, "Гал., 215 зач., VI, 11–18."},	//Неделя 22
+						ApEvReads{ 0XFF1, "Кол., 255 зач., II, 13–20."},	//пн - седмица 22
+						ApEvReads{ 0X1001, "Кол., 256 зач., II, 20 – III, 3."},	//вт
+						ApEvReads{ 0X1031, "Кол., 259 зач., III, 17 – IV, 1."},	//ср
+						ApEvReads{ 0X1041, "Кол., 260 зач., IV, 2–9."},	//чт
+						ApEvReads{ 0X1051, "Кол., 261 зач., IV, 10–18."},	//пт
+						ApEvReads{ 0XB21, "2 Кор., 178 зач., V, 1–10."}	//сб
 					},
-		std::array { ApEvReads{220,"Еф., 220 зач., II, 4–10."},	//Неделя 23
-						ApEvReads{262,"1 Сол., 262 зач., I, 1–5."},	//пн - седмица 23
-						ApEvReads{263,"1 Сол., 263 зач., I, 6–10."},	//вт
-						ApEvReads{264,"1 Сол., 264 зач., II, 1–8."},	//ср
-						ApEvReads{265,"1 Сол., 265 зач., II, 9–14."},	//чт
-						ApEvReads{266,"1 Сол., 266 зач., II, 14–19."},	//пт
-						ApEvReads{185,"2 Кор., 185 зач., VIII, 1–5."}	//сб
+		std::array { ApEvReads{ 0XDC1, "Еф., 220 зач., II, 4–10."},	//Неделя 23
+						ApEvReads{ 0X1061, "1 Сол., 262 зач., I, 1–5."},	//пн - седмица 23
+						ApEvReads{ 0X1071, "1 Сол., 263 зач., I, 6–10."},	//вт
+						ApEvReads{ 0X1081, "1 Сол., 264 зач., II, 1–8."},	//ср
+						ApEvReads{ 0X1091, "1 Сол., 265 зач., II, 9–14."},	//чт
+						ApEvReads{ 0X10A1, "1 Сол., 266 зач., II, 14–19."},	//пт
+						ApEvReads{ 0XB91, "2 Кор., 185 зач., VIII, 1–5."}	//сб
 					},
-		std::array { ApEvReads{221,"Еф., 221 зач., II, 14–22."},	//Неделя 24
-						ApEvReads{267,"1 Сол., 267 зач., II, 20 – III, 8."},	//пн - седмица 24
-						ApEvReads{268,"1 Сол., 268 зач., III, 9–13."},	//вт
-						ApEvReads{269,"1 Сол., 269 зач., IV, 1–12."},	//ср
-						ApEvReads{271,"1 Сол., 271 зач., V, 1–8."},	//чт
-						ApEvReads{272,"1 Сол., 272 зач., V, 9–13, 24–28."},	//пт
-						ApEvReads{191,"2 Кор., 191 зач., XI, 1–6."}	//сб
+		std::array { ApEvReads{ 0XDD1, "Еф., 221 зач., II, 14–22."},	//Неделя 24
+						ApEvReads{ 0X10B1, "1 Сол., 267 зач., II, 20 – III, 8."},	//пн - седмица 24
+						ApEvReads{ 0X10C1, "1 Сол., 268 зач., III, 9–13."},	//вт
+						ApEvReads{ 0X10D1, "1 Сол., 269 зач., IV, 1–12."},	//ср
+						ApEvReads{ 0X10F1, "1 Сол., 271 зач., V, 1–8."},	//чт
+						ApEvReads{ 0X1101, "1 Сол., 272 зач., V, 9–13, 24–28."},	//пт
+						ApEvReads{ 0XBF1, "2 Кор., 191 зач., XI, 1–6."}	//сб
 					},
-		std::array { ApEvReads{224,"Еф., 224 зач., IV, 1–6."},	//Неделя 25
-						ApEvReads{274,"2 Сол., 274 зач., I, 1–10."},	//пн - седмица 25
-						ApEvReads{274,"2 Сол., 274 зач., I, 10 - II, 2."},	//вт
-						ApEvReads{275,"2 Сол., 275 зач., II, 1–12."},	//ср
-						ApEvReads{276,"2 Сол., 276 зач., II, 13 – III, 5."},	//чт
-						ApEvReads{277,"2 Сол., 277 зач., III, 6–18."},	//пт
-						ApEvReads{199,"Гал., 199 зач., I, 3–10."}	//сб
+		std::array { ApEvReads{ 0XE01, "Еф., 224 зач., IV, 1–6."},	//Неделя 25
+						ApEvReads{ 0X1121, "2 Сол., 274 зач., I, 1–10."},	//пн - седмица 25
+						ApEvReads{ 0X1121, "2 Сол., 274 зач., I, 10 - II, 2."},	//вт
+						ApEvReads{ 0X1131, "2 Сол., 275 зач., II, 1–12."},	//ср
+						ApEvReads{ 0X1141, "2 Сол., 276 зач., II, 13 – III, 5."},	//чт
+						ApEvReads{ 0X1151, "2 Сол., 277 зач., III, 6–18."},	//пт
+						ApEvReads{ 0XC71, "Гал., 199 зач., I, 3–10."}	//сб
 					},
-		std::array { ApEvReads{229,"Еф., 229 зач., V, 8–19."},	//Неделя 26
-						ApEvReads{278,"1 Тим., 278 зач., I, 1–7."},	//пн - седмица 26
-						ApEvReads{279,"1 Тим., 279 зач., I, 8–14."},	//вт
-						ApEvReads{281,"1 Тим., 281 зач., I, 18–20; II, 8–15."},	//ср
-						ApEvReads{283,"1 Тим., 283 зач., III, 1–13."},	//чт
-						ApEvReads{285,"1 Тим., 285 зач., IV, 4–8, 16."},	//пт
-						ApEvReads{205,"Гал., 205 зач., III, 8–12."}	//сб
+		std::array { ApEvReads{ 0XE51, "Еф., 229 зач., V, 8–19."},	//Неделя 26
+						ApEvReads{ 0X1161, "1 Тим., 278 зач., I, 1–7."},	//пн - седмица 26
+						ApEvReads{ 0X1171, "1 Тим., 279 зач., I, 8–14."},	//вт
+						ApEvReads{ 0X1191, "1 Тим., 281 зач., I, 18–20; II, 8–15."},	//ср
+						ApEvReads{ 0X11B1, "1 Тим., 283 зач., III, 1–13."},	//чт
+						ApEvReads{ 0X11D1, "1 Тим., 285 зач., IV, 4–8, 16."},	//пт
+						ApEvReads{ 0XCD1, "Гал., 205 зач., III, 8–12."}	//сб
 					},
-		std::array { ApEvReads{233,"Еф., 233 зач., VI, 10–17."},	//Неделя 27
-						ApEvReads{285,"1 Тим., 285 зач., V, 1-10."},	//пн - седмица 27
-						ApEvReads{286,"1 Тим., 286 зач., V, 11–21."},	//вт
-						ApEvReads{287,"1 Тим., 287 зач., V, 22 – VI, 11."},	//ср
-						ApEvReads{289,"1 Тим., 289 зач., VI, 17–21."},	//чт
-						ApEvReads{290,"2 Тим., 290 зач., I, 1–2, 8–18."},	//пт
-						ApEvReads{213,"Гал., 213 зач., V, 22 – VI, 2."}	//сб
+		std::array { ApEvReads{ 0XE91, "Еф., 233 зач., VI, 10–17."},	//Неделя 27
+						ApEvReads{ 0X11D1, "1 Тим., 285 зач., V, 1-10."},	//пн - седмица 27
+						ApEvReads{ 0X11E1, "1 Тим., 286 зач., V, 11–21."},	//вт
+						ApEvReads{ 0X11F1, "1 Тим., 287 зач., V, 22 – VI, 11."},	//ср
+						ApEvReads{ 0X1211, "1 Тим., 289 зач., VI, 17–21."},	//чт
+						ApEvReads{ 0X1221, "2 Тим., 290 зач., I, 1–2, 8–18."},	//пт
+						ApEvReads{ 0XD51, "Гал., 213 зач., V, 22 – VI, 2."}	//сб
 					},
-		std::array { ApEvReads{250,"Кол., 250 зач., I, 12–18."},	//Неделя 28
-						ApEvReads{294,"2 Тим., 294 зач., II, 20–26."},	//пн - седмица 28
-						ApEvReads{297,"2 Тим., 297 зач., III, 16 – IV, 4."},	//вт
-						ApEvReads{299,"2 Тим., 299 зач., IV, 9–22."},	//ср
-						ApEvReads{300,"Тит., 300 зач., I, 5 - II, 1."},	//чт
-						ApEvReads{301,"Тит., 301 зач., I, 15 – II, 10."},	//пт
-						ApEvReads{218,"Еф., 218 зач., I, 16–23."}	//сб
+		std::array { ApEvReads{ 0XFA1, "Кол., 250 зач., I, 12–18."},	//Неделя 28
+						ApEvReads{ 0X1261, "2 Тим., 294 зач., II, 20–26."},	//пн - седмица 28
+						ApEvReads{ 0X1291, "2 Тим., 297 зач., III, 16 – IV, 4."},	//вт
+						ApEvReads{ 0X12B1, "2 Тим., 299 зач., IV, 9–22."},	//ср
+						ApEvReads{ 0X12C1, "Тит., 300 зач., I, 5 - II, 1."},	//чт
+						ApEvReads{ 0X12D1, "Тит., 301 зач., I, 15 – II, 10."},	//пт
+						ApEvReads{ 0XDA1, "Еф., 218 зач., I, 16–23."}	//сб
 					},
-		std::array { ApEvReads{257,"Кол., 257 зач., III, 4-11."},	//Неделя 29
-						ApEvReads{308,"Евр., 308 зач., III, 5–11, 17–19."},	//пн - седмица 29
-						ApEvReads{310,"Евр., 310 зач., IV, 1–13."},	//вт
-						ApEvReads{312,"Евр., 312 зач., V, 11 – VI, 8."},	//ср
-						ApEvReads{315,"Евр., 315 зач., VII, 1–6."},	//чт
-						ApEvReads{317,"Евр., 317 зач., VII, 18–25."},	//пт
-						ApEvReads{220,"Еф., 220 зач., II, 11-13."}	//сб
+		std::array { ApEvReads{ 0X1011, "Кол., 257 зач., III, 4-11."},	//Неделя 29
+						ApEvReads{ 0X1341, "Евр., 308 зач., III, 5–11, 17–19."},	//пн - седмица 29
+						ApEvReads{ 0X1361, "Евр., 310 зач., IV, 1–13."},	//вт
+						ApEvReads{ 0X1381, "Евр., 312 зач., V, 11 – VI, 8."},	//ср
+						ApEvReads{ 0X13B1, "Евр., 315 зач., VII, 1–6."},	//чт
+						ApEvReads{ 0X13D1, "Евр., 317 зач., VII, 18–25."},	//пт
+						ApEvReads{ 0XDC1, "Еф., 220 зач., II, 11-13."}	//сб
 					},
-		std::array { ApEvReads{258,"Кол., 258 зач., III, 12–16."},	//Неделя 30
-						ApEvReads{319,"Евр., 319 зач., VIII, 7–13."},	//пн - седмица 30
-						ApEvReads{321,"Евр., 321 зач., IX, 8–10, 15–23."},	//вт
-						ApEvReads{323,"Евр., 323 зач., X, 1–18."},	//ср
-						ApEvReads{326,"Евр., 326 зач., X, 35 – XI, 7."},	//чт
-						ApEvReads{327,"Евр., 327 зач., XI, 8, 11–16."},	//пт
-						ApEvReads{228,"Еф., 228 зач., V, 1–8."}	//сб
+		std::array { ApEvReads{ 0X1021, "Кол., 258 зач., III, 12–16."},	//Неделя 30
+						ApEvReads{ 0X13F1, "Евр., 319 зач., VIII, 7–13."},	//пн - седмица 30
+						ApEvReads{ 0X1411, "Евр., 321 зач., IX, 8–10, 15–23."},	//вт
+						ApEvReads{ 0X1431, "Евр., 323 зач., X, 1–18."},	//ср
+						ApEvReads{ 0X1461, "Евр., 326 зач., X, 35 – XI, 7."},	//чт
+						ApEvReads{ 0X1471, "Евр., 327 зач., XI, 8, 11–16."},	//пт
+						ApEvReads{ 0XE41, "Еф., 228 зач., V, 1–8."}	//сб
 					},
-		std::array { ApEvReads{280,"1 Тим., 280 зач., I, 15-17."},	//Неделя 31
-						ApEvReads{329,"Евр., 329 зач., XI, 17–23, 27–31."},//пн - седмица 31
-						ApEvReads{333,"Евр., 333 зач., XII, 25–26; XIII, 22–25."},//вт
-						ApEvReads{ 50,"Иак., 50 зач., I, 1-18."},	//ср
-						ApEvReads{ 51,"Иак., 51 зач., I, 19-27."},	//чт
-						ApEvReads{ 52,"Иак., 52 зач., II, 1–13."},	//пт
-						ApEvReads{249,"Кол., 249 зач., I, 3-6."}	//сб
+		std::array { ApEvReads{ 0X1181, "1 Тим., 280 зач., I, 15-17."},	//Неделя 31
+						ApEvReads{ 0X1491, "Евр., 329 зач., XI, 17–23, 27–31."},//пн - седмица 31
+						ApEvReads{ 0X14D1, "Евр., 333 зач., XII, 25–26; XIII, 22–25."},//вт
+						ApEvReads{ 0X321, "Иак., 50 зач., I, 1-18."},	//ср
+						ApEvReads{ 0X331, "Иак., 51 зач., I, 19-27."},	//чт
+						ApEvReads{ 0X341, "Иак., 52 зач., II, 1–13."},	//пт
+						ApEvReads{ 0XF91, "Кол., 249 зач., I, 3-6."}	//сб
 					},
-		std::array { ApEvReads{285,"1 Тим., 285 зач., IV, 9-15."},	//Неделя 32
-						ApEvReads{ 53,"Иак., 53 зач., II, 14–26."},	//пн - седмица 32
-						ApEvReads{ 54,"Иак., 54 зач., III, 1–10."},	//вт
-						ApEvReads{ 55,"Иак., 55 зач., III, 11 – IV, 6."},	//ср
-						ApEvReads{ 56,"Иак., 56 зач., IV, 7 – V, 9."},	//чт
-						ApEvReads{ 58,"1 Пет., 58 зач., I, 1–2, 10–12; II, 6–10."},//пт
-						ApEvReads{273,"1 Сол., 273 зач., V, 14–23."}	//сб
+		std::array { ApEvReads{ 0X11D1, "1 Тим., 285 зач., IV, 9-15."},	//Неделя 32
+						ApEvReads{ 0X351, "Иак., 53 зач., II, 14–26."},	//пн - седмица 32
+						ApEvReads{ 0X361, "Иак., 54 зач., III, 1–10."},	//вт
+						ApEvReads{ 0X371, "Иак., 55 зач., III, 11 – IV, 6."},	//ср
+						ApEvReads{ 0X381, "Иак., 56 зач., IV, 7 – V, 9."},	//чт
+						ApEvReads{ 0X3A1, "1 Пет., 58 зач., I, 1–2, 10–12; II, 6–10."},//пт
+						ApEvReads{ 0X1111, "1 Сол., 273 зач., V, 14–23."}	//сб
 					},
-		std::array { ApEvReads{296,"2 Тим., 296 зач., III, 10–15."},	//Неделя 33 о мытари и фарисеи
-						ApEvReads{ 59,"1 Пет., 59 зач., II, 21 – III, 9."},	//пн - седмица 33
-						ApEvReads{ 60,"1 Пет., 60 зач., III, 10–22."},	//вт
-						ApEvReads{ 61,"1 Пет., 61 зач., IV, 1–11."},	//ср
-						ApEvReads{ 62,"1 Пет., 62 зач., IV, 12 – V, 5."},	//чт
-						ApEvReads{ 64,"2 Пет., 64 зач., I, 1–10."},	//пт
-						ApEvReads{293,"2 Тим., 293 зач., II, 11–19."}	//сб
+		std::array { ApEvReads{ 0X1281, "2 Тим., 296 зач., III, 10–15."},	//Неделя 33 о мытари и фарисеи
+						ApEvReads{ 0X3B1, "1 Пет., 59 зач., II, 21 – III, 9."},	//пн - седмица 33
+						ApEvReads{ 0X3C1, "1 Пет., 60 зач., III, 10–22."},	//вт
+						ApEvReads{ 0X3D1, "1 Пет., 61 зач., IV, 1–11."},	//ср
+						ApEvReads{ 0X3E1, "1 Пет., 62 зач., IV, 12 – V, 5."},	//чт
+						ApEvReads{ 0X401, "2 Пет., 64 зач., I, 1–10."},	//пт
+						ApEvReads{ 0X1251, "2 Тим., 293 зач., II, 11–19."}	//сб
 					},
-		std::array { ApEvReads{135,"1 Кор., 135 зач., VI, 12-20."},	//Неделя 34 о блуднем сыне
-						ApEvReads{ 66,"2 Пет., 66 зач., I, 20 – II, 9."},	//пн - седмица 34
-						ApEvReads{ 67,"2 Пет., 67 зач., II, 9–22."},	//вт
-						ApEvReads{ 68,"2 Пет., 68 зач., III, 1–18."},	//ср
-						ApEvReads{ 69,"1 Ин., 69 зач., I, 8 – II, 6."},	//чт
-						ApEvReads{ 70,"1 Ин., 70 зач., II, 7–17."},	//пт
-						ApEvReads{295,"2 Тим., 295 зач., III, 1–9."}	//сб
+		std::array { ApEvReads{ 0X871, "1 Кор., 135 зач., VI, 12-20."},	//Неделя 34 о блуднем сыне
+						ApEvReads{ 0X421, "2 Пет., 66 зач., I, 20 – II, 9."},	//пн - седмица 34
+						ApEvReads{ 0X431, "2 Пет., 67 зач., II, 9–22."},	//вт
+						ApEvReads{ 0X441, "2 Пет., 68 зач., III, 1–18."},	//ср
+						ApEvReads{ 0X451, "1 Ин., 69 зач., I, 8 – II, 6."},	//чт
+						ApEvReads{ 0X461, "1 Ин., 70 зач., II, 7–17."},	//пт
+						ApEvReads{ 0X1271, "2 Тим., 295 зач., III, 1–9."}	//сб
 					},
-		std::array { ApEvReads{140,"1 Кор., 140 зач., VIII, 8 – IX, 2."},	//Неделя 35 мясопустная
-						ApEvReads{ 71,"1 Ин., 71 зач., II, 18 – III, 10."},	//пн - седмица 35
-						ApEvReads{ 72,"1 Ин., 72 зач., III, 10–20."},	//вт
-						ApEvReads{ 73,"1 Ин., 73 зач., III, 21 – IV, 6."},	//ср
-						ApEvReads{ 74,"1 Ин., 74 зач., IV, 20 – V, 21."},	//чт
-						ApEvReads{ 75,"2 Ин., 75 зач., I, 1–13."},	//пт
-						ApEvReads{146,"1 Кор., 146 зач., X, 23–28."}	//сб
+		std::array { ApEvReads{ 0X8C1, "1 Кор., 140 зач., VIII, 8 – IX, 2."},	//Неделя 35 мясопустная
+						ApEvReads{ 0X471, "1 Ин., 71 зач., II, 18 – III, 10."},	//пн - седмица 35
+						ApEvReads{ 0X481, "1 Ин., 72 зач., III, 10–20."},	//вт
+						ApEvReads{ 0X491, "1 Ин., 73 зач., III, 21 – IV, 6."},	//ср
+						ApEvReads{ 0X4A1, "1 Ин., 74 зач., IV, 20 – V, 21."},	//чт
+						ApEvReads{ 0X4B1, "2 Ин., 75 зач., I, 1–13."},	//пт
+						ApEvReads{ 0X921, "1 Кор., 146 зач., X, 23–28."}	//сб
 					},
-		std::array { ApEvReads{112,"Рим., 112 зач., XIII, 11 – XIV, 4."},	//Неделя 36 сыропустная
-						ApEvReads{ 76,"3 Ин., 76 зач., I, 1–15."},	//пн - седмица 36
-						ApEvReads{ 77,"Иуд., 77 зач., I, 1–10."},	//вт
+		std::array { ApEvReads{ 0X701, "Рим., 112 зач., XIII, 11 – XIV, 4."},	//Неделя 36 сыропустная
+						ApEvReads{ 0X4C1, "3 Ин., 76 зач., I, 1–15."},	//пн - седмица 36
+						ApEvReads{ 0X4D1, "Иуд., 77 зач., I, 1–10."},	//вт
 						ApEvReads{},	//ср
-						ApEvReads{ 78,"Иуд., 78 зач., I, 11–25."},	//чт
+						ApEvReads{ 0X4E1, "Иуд., 78 зач., I, 11–25."},	//чт
 						ApEvReads{},	//пт
-						ApEvReads{115,"Рим., 115 зач., XIV, 19–26."}	//сб
+						ApEvReads{ 0X731, "Рим., 115 зач., XIV, 19–26."}	//сб
 					}
 	};
 	auto apostol_table1_get_chteniya = [](int8_t n50, int8_t dn)->ApEvReads {
@@ -899,72 +1001,72 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 	//таблица рядовых чтений на литургии из приложения богосл.евангелия. период от начала вел.поста до Троицкая суб.вкл.
 	//асс.массив, где first - константа-признак даты (блок 1 - переходящие дни года)
 	static const TT2 evangelie_table_2 {
-		{1,    { 1, "Ин., 1 зач., I, 1–17." } },//пасха
-		{2,    { 2, "Ин., 2 зач., I, 18–28." } },
-		{3,    {113,"Лк., 113 зач., XXIV, 12–35."  } },
-		{4,    { 4, "Ин., 4 зач., I, 35–51." } },
-		{5,    { 8, "Ин., 8 зач., III, 1–15." } },
-		{6,    { 7, "Ин., 7 зач., II, 12–22." } },
-		{7,    {11, "Ин., 11 зач., III, 22–33." } },
-		{8,    {65, "Ин., 65 зач., XX, 19–31." } },//Неделя 2, о Фоме
-		{9,    { 6, "Ин., 6 зач., II, 1–11." } },
-		{10,   {10, "Ин., 10 зач., III, 16–21." } },
-		{11,   {15, "Ин., 15 зач., V, 17–24." } },
-		{12,   {16, "Ин., 16 зач., V, 24–30." } },
-		{13,   {17, "Ин., 17 зач., V, 30 – VI, 2." } },
-		{14,   {19, "Ин., 19 зач., VI, 14–27." } },
-		{15,   {69, "Мк., 69 зач., XV, 43–47." } },//Неделя 3, о мироносицах
-		{16,   {13, "Ин., 13 зач., IV, 46–54." } },
-		{17,   {20, "Ин., 20 зач., VI, 27–33." } },
-		{18,   {21, "Ин., 21 зач., VI, 35–39." } },
-		{19,   {22, "Ин., 22 зач., VI, 40–44." } },
-		{20,   {23, "Ин., 23 зач., VI, 48–54." } },
-		{21,   {52, "Ин., 52 зач., XV, 17 – XVI, 2." } },
-		{22,   {14, "Ин., 14 зач., V, 1–15." } },//Неделя 4, о разслабленнем
-		{23,   {24, "Ин., 24 зач., VI, 56–69." } },
-		{24,   {25, "Ин., 25 зач., VII, 1–13." } },
-		{25,   {26, "Ин., 26 зач., VII, 14–30." } },
-		{26,   {29, "Ин., 29 зач., VIII, 12–20." } },
-		{27,   {30, "Ин., 30 зач., VIII, 21–30." } },
-		{28,   {31, "Ин., 31 зач., VIII, 31–42." } },
-		{29,   {12, "Ин., 12 зач., IV, 5–42." } },//Неделя 5, о самаряныни
-		{30,   {32, "Ин., 32 зач., VIII, 42–51." } },
-		{31,   {33, "Ин., 33 зач., VIII, 51–59." } },
-		{32,   {18, "Ин., 18 зач., VI, 5–14." } },
-		{33,   {35, "Ин., 35 зач., IX, 39 – X, 9." } },
-		{34,   {37, "Ин., 37 зач., X, 17–28." } },
-		{35,   {38, "Ин., 38 зач., X, 27–38." } },
-		{36,   {34, "Ин., 34 зач., IX, 1–38." } },//Неделя 6, о слепом
-		{37,   {40, "Ин., 40 зач., XI, 47–57." } },
-		{38,   {42, "Ин., 42 зач., XII, 19–36." } },
-		{39,   {43, "Ин., 43 зач., XII, 36–47." } },
-		{40,   {114,"Лк., 114 зач., XXIV, 36–53."  } },//Вознесение Господне
-		{41,   {47, "Ин., 47 зач., XIV, 1–11." } },
-		{42,   {48, "Ин., 48 зач., XIV, 10–21." } },
-		{43,   {56, "Ин., 56 зач., XVII, 1–13." } },//Неделя 7, святых отец
-		{44,   {49, "Ин., 49 зач., XIV, 27 – XV, 7." } },
-		{45,   {53, "Ин., 53 зач., XVI, 2–13." } },
-		{46,   {54, "Ин., 54 зач., XVI, 15–23." } },
-		{47,   {55, "Ин., 55 зач., XVI, 23–33." } },
-		{48,   {57, "Ин., 57 зач., XVII, 18–26." } },
-		{49,   {67, "Ин., 67 зач., XXI, 15–25." } },
-		{92,   {10, "Мк., 10 зач., II, 23 – III, 5." } },//Суббота первая поста
-		{93,   { 5, "Ин., 5 зач., I, 43–51." } },//Неделя первая поста
-		{99,   { 6, "Мк., 6 зач., I, 35–44." } },//Суббота вторая поста
-		{100,  { 7, "Мк., 7 зач., II, 1–12." } },//Неделя вторая поста
-		{106,  { 8, "Мк., 8 зач., II, 14–17." } },//Суббота третия поста
-		{107,  {37, "Мк., 37 зач., VIII, 34 – IX, 1." } },//Неделя третия поста
-		{113,  {31, "Мк., 31 зач., VII, 31–37." } },//Суббота четвертая поста
-		{114,  {40, "Мк., 40 зач., IX, 17–31." } },//Неделя четвертая постa
-		{120,  {35, "Мк., 35 зач., VIII, 27–31." } },//Суббота пятая поста
-		{121,  {47, "Мк., 47 зач., X, 32–45." } },//Неделя пятая поста
-		{127,  {39, "Ин., 39 зач., XI, 1–45." } },//Суббота шестая Лазарева
-		{128,  {41, "Ин., 41 зач., XII, 1–18." } },//В неделю цветоносную
-		{129,  {98, "Мф., 98 зач., XXIV, 3–35." } },//великий Понедельник
-		{130,  {102,"Мф., 102 зач., XXIV, 36 - XXVI, 2." } },//великий Вторник
-		{131,  {108,"Мф., 108 зач., XXVI, 6-16." } },//великую Среду
-		{132,  {107,"Мф., 107 зач., XXVI, 1–20. Ин., 44 зач., XIII, 3–17. Мф., 108 зач.(от полу́), XXVI, 21–39. Лк., 109 зач., XXII, 43–45. Мф., 108 зач., XXVI, 40 – XXVII, 2." } },//великий Четверток
-		{134,  {115,"Мф., 115 зач., XXVIII, 1–20." } } //великую Субботу
+		{1,    { 0X15, "Ин., 1 зач., I, 1–17." } },//пасха
+		{2,    { 0X25, "Ин., 2 зач., I, 18–28." } },
+		{3,    { 0X714, "Лк., 113 зач., XXIV, 12–35."  } },
+		{4,    { 0X45, "Ин., 4 зач., I, 35–51." } },
+		{5,    { 0X85, "Ин., 8 зач., III, 1–15." } },
+		{6,    { 0X75, "Ин., 7 зач., II, 12–22." } },
+		{7,    { 0XB5, "Ин., 11 зач., III, 22–33." } },
+		{8,    { 0X415, "Ин., 65 зач., XX, 19–31." } },//Неделя 2, о Фоме
+		{9,    { 0X65, "Ин., 6 зач., II, 1–11." } },
+		{10,   { 0XA5, "Ин., 10 зач., III, 16–21." } },
+		{11,   { 0XF5, "Ин., 15 зач., V, 17–24." } },
+		{12,   { 0X105, "Ин., 16 зач., V, 24–30." } },
+		{13,   { 0X115, "Ин., 17 зач., V, 30 – VI, 2." } },
+		{14,   { 0X135, "Ин., 19 зач., VI, 14–27." } },
+		{15,   { 0X453, "Мк., 69 зач., XV, 43–47." } },//Неделя 3, о мироносицах
+		{16,   { 0XD5, "Ин., 13 зач., IV, 46–54." } },
+		{17,   { 0X145, "Ин., 20 зач., VI, 27–33." } },
+		{18,   { 0X155, "Ин., 21 зач., VI, 35–39." } },
+		{19,   { 0X165, "Ин., 22 зач., VI, 40–44." } },
+		{20,   { 0X175, "Ин., 23 зач., VI, 48–54." } },
+		{21,   { 0X345, "Ин., 52 зач., XV, 17 – XVI, 2." } },
+		{22,   { 0XE5, "Ин., 14 зач., V, 1–15." } },//Неделя 4, о разслабленнем
+		{23,   { 0X185, "Ин., 24 зач., VI, 56–69." } },
+		{24,   { 0X195, "Ин., 25 зач., VII, 1–13." } },
+		{25,   { 0X1A5, "Ин., 26 зач., VII, 14–30." } },
+		{26,   { 0X1D5, "Ин., 29 зач., VIII, 12–20." } },
+		{27,   { 0X1E5, "Ин., 30 зач., VIII, 21–30." } },
+		{28,   { 0X1F5, "Ин., 31 зач., VIII, 31–42." } },
+		{29,   { 0XC5, "Ин., 12 зач., IV, 5–42." } },//Неделя 5, о самаряныни
+		{30,   { 0X205, "Ин., 32 зач., VIII, 42–51." } },
+		{31,   { 0X215, "Ин., 33 зач., VIII, 51–59." } },
+		{32,   { 0X125, "Ин., 18 зач., VI, 5–14." } },
+		{33,   { 0X235, "Ин., 35 зач., IX, 39 – X, 9." } },
+		{34,   { 0X255, "Ин., 37 зач., X, 17–28." } },
+		{35,   { 0X265, "Ин., 38 зач., X, 27–38." } },
+		{36,   { 0X225, "Ин., 34 зач., IX, 1–38." } },//Неделя 6, о слепом
+		{37,   { 0X285, "Ин., 40 зач., XI, 47–57." } },
+		{38,   { 0X2A5, "Ин., 42 зач., XII, 19–36." } },
+		{39,   { 0X2B5, "Ин., 43 зач., XII, 36–47." } },
+		{40,   { 0X724, "Лк., 114 зач., XXIV, 36–53."  } },//Вознесение Господне
+		{41,   { 0X2F5, "Ин., 47 зач., XIV, 1–11." } },
+		{42,   { 0X305, "Ин., 48 зач., XIV, 10–21." } },
+		{43,   { 0X385, "Ин., 56 зач., XVII, 1–13." } },//Неделя 7, святых отец
+		{44,   { 0X315, "Ин., 49 зач., XIV, 27 – XV, 7." } },
+		{45,   { 0X355, "Ин., 53 зач., XVI, 2–13." } },
+		{46,   { 0X365, "Ин., 54 зач., XVI, 15–23." } },
+		{47,   { 0X375, "Ин., 55 зач., XVI, 23–33." } },
+		{48,   { 0X395, "Ин., 57 зач., XVII, 18–26." } },
+		{49,   { 0X435, "Ин., 67 зач., XXI, 15–25." } },
+		{92,   { 0XA3, "Мк., 10 зач., II, 23 – III, 5." } },//Суббота первая поста
+		{93,   { 0X55, "Ин., 5 зач., I, 43–51." } },//Неделя первая поста
+		{99,   { 0X63, "Мк., 6 зач., I, 35–44." } },//Суббота вторая поста
+		{100,  { 0X73, "Мк., 7 зач., II, 1–12." } },//Неделя вторая поста
+		{106,  { 0X83, "Мк., 8 зач., II, 14–17." } },//Суббота третия поста
+		{107,  { 0X253, "Мк., 37 зач., VIII, 34 – IX, 1." } },//Неделя третия поста
+		{113,  { 0X1F3, "Мк., 31 зач., VII, 31–37." } },//Суббота четвертая поста
+		{114,  { 0X283, "Мк., 40 зач., IX, 17–31." } },//Неделя четвертая постa
+		{120,  { 0X233, "Мк., 35 зач., VIII, 27–31." } },//Суббота пятая поста
+		{121,  { 0X2F3, "Мк., 47 зач., X, 32–45." } },//Неделя пятая поста
+		{127,  { 0X275, "Ин., 39 зач., XI, 1–45." } },//Суббота шестая Лазарева
+		{128,  { 0X295, "Ин., 41 зач., XII, 1–18." } },//В неделю цветоносную
+		{129,  { 0X622, "Мф., 98 зач., XXIV, 3–35." } },//великий Понедельник
+		{130,  { 0X662, "Мф., 102 зач., XXIV, 36 - XXVI, 2." } },//великий Вторник
+		{131,  { 0X6C2, "Мф., 108 зач., XXVI, 6-16." } },//великую Среду
+		{132,  { 0X6B2, "Мф., 107 зач., XXVI, 1–20. Ин., 44 зач., XIII, 3–17. Мф., 108 зач.(от полу́), XXVI, 21–39. Лк., 109 зач., XXII, 43–45. Мф., 108 зач., XXVI, 40 – XXVII, 2." } },//великий Четверток
+		{134,  { 0X732, "Мф., 115 зач., XXVIII, 1–20." } } //великую Субботу
 	};
 	auto evangelie_table2_get_chteniya = [](const std::set<uint16_t>& markers)->ApEvReads {
 		ApEvReads res{};
@@ -985,69 +1087,70 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 	//таблица рядовых чтений на литургии из приложения богосл.апостола. период от начала вел.поста до Троицкая суб.вкл.
 	//асс.массив, где first - константа-признак даты (блок 1 - переходящие дни года)
 	static const TT2 apostol_table_2 {
-		{1,    {  1, "Деян., 1 зач., I, 1–8." } },   //пасха
-		{2,    {  2, "Деян., 2 зач., I, 12–17, 21–26." } },
-		{3,    {  4, "Деян., 4 зач., II, 14–21." } },
-		{4,    {  5, "Деян., 5 зач., II, 22–36." } },
-		{5,    {  6, "Деян., 6 зач., II, 38–43." } },
-		{6,    {  7, "Деян., 7 зач., III, 1–8." } },
-		{7,    {  8, "Деян., 8 зач., III, 11–16." } },
-		{8,    { 14, "Деян., 14 зач., V, 12–20." } },//Неделя 2, о Фоме
-		{9,    {  9, "Деян., 9 зач., III, 19–26." } },
-		{10,   { 10, "Деян., 10 зач., IV, 1–10." } },
-		{11,   { 11, "Деян., 11 зач., IV, 13–22." } },
-		{12,   { 12, "Деян., 12 зач., IV, 23–31." } },
-		{13,   { 13, "Деян., 13 зач., V, 1–11." } },
-		{14,   { 15, "Деян., 15 зач., V, 21–33." } },
-		{15,   { 16, "Деян., 16 зач., VI, 1-7." } },//Неделя 3, о мироносицах
-		{16,   { 17, "Деян., 17 зач., VI, 8 – VII, 5, 47–60." } },
-		{17,   { 18, "Деян., 18 зач., VIII, 5–17." } },
-		{18,   { 19, "Деян., 19 зач., VIII, 18–25." } },
-		{19,   { 20, "Деян., 20 зач., VIII, 26–39." } },
-		{20,   { 21, "Деян., 21 зач., VIII, 40 – IX, 19." } },
-		{21,   { 22, "Деян., 22 зач., IX, 19–31." } },
-		{22,   { 23, "Деян., 23 зач., IX, 32-42." } },//Неделя 4, о разслабленнем
-		{23,   { 24, "Деян., 24 зач., X, 1–16." } },
-		{24,   { 25, "Деян., 25 зач., X, 21–33." } },
-		{25,   { 34, "Деян., 34 зач., XIV, 6–18." } },
-		{26,   { 26, "Деян., 26 зач., X, 34–43." } },
-		{27,   { 27, "Деян., 27 зач., X, 44 – XI, 10." } },
-		{28,   { 29, "Деян., 29 зач., XII, 1–11." } },
-		{29,   { 28, "Деян., 28 зач., XI, 19–26, 29–30." } },//Неделя 5, о самаряныни
-		{30,   { 30, "Деян., 30 зач., XII, 12–17." } },
-		{31,   { 31, "Деян., 31 зач., XII, 25 – XIII, 12." } },
-		{32,   { 32, "Деян., 32 зач., XIII, 13–24." } },
-		{33,   { 35, "Деян., 35 зач., XIV, 20–27." } },
-		{34,   { 36, "Деян., 36 зач., XV, 5–34." } },
-		{35,   { 37, "Деян., 37 зач., XV, 35–41." } },
-		{36,   { 38, "Деян., 38 зач., XVI, 16–34." } },//Неделя 6, о слепом
-		{37,   { 39, "Деян., 39 зач., XVII, 1–15." } },
-		{38,   { 40, "Деян., 40 зач., XVII, 19-28." } },
-		{39,   { 41, "Деян., 41 зач., XVIII, 22–28." } },
-		{40,   {  1, "Деян., 1 зач., I, 1–12." } },//Вознесение Господне
-		{41,   { 42, "Деян., 42 зач., XIX, 1–8." } },
-		{42,   { 43, "Деян., 43 зач., XX, 7–12." } },
-		{43,   { 44, "Деян., 44 зач., XX, 16-18, 28-36." } },//Неделя 7, святых отец
-		{44,   { 45, "Деян., 45 зач., XXI, 8–14." } },
-		{45,   { 46, "Деян., 46 зач., XXI, 26–32." } },
-		{46,   { 47, "Деян., 47 зач., XXIII, 1–11." } },
-		{47,   { 48, "Деян., 48 зач., XXV, 13–19." } },
-		{48,   { 50, "Деян., 50 зач., XXVII, 1–44." } },
-		{49,   { 51, "Деян., 51 зач., XXVIII, 1–31." } },
-		{92,   {303, "Евр., 303 зач., I, 1–12." } },//Суббота первая поста
-		{93,   {329, "Евр., 329 зач., XI, 24-26, 32 - XII, 2." } },//Неделя первая поста
-		{99,   {309, "Евр., 309 зач., III, 12–16." } },//Суббота вторая поста
-		{100,  {304, "Евр., 304 зач., I, 10 – II, 3." } },//Неделя вторая поста
-		{106,  {325, "Евр., 325 зач., X, 32–38." } },//Суббота третия поста
-		{107,  {311, "Евр., 311 зач., IV, 14 – V, 6." } },//Неделя третия поста
-		{113,  {313, "Евр., 313 зач., VI, 9–12." } },//Суббота четвертая поста
-		{114,  {314, "Евр., 314 зач., VI, 13–20." } },//Неделя четвертая постa
-		{120,  {322, "Евр., 322 зач., IX, 24–28." } },//Суббота пятая поста
-		{121,  {321, "Евр., 321 зач., IX, 11-14." } },//Неделя пятая поста
-		{127,  {333, "Евр., 333 зач., XII, 28 - XIII, 8." } },//Суббота шестая Лазарева
-		{128,  {247, "Флп., 247 зач., IV, 4-9." } },//В неделю цветоносную
-		{132,  {149, "1 Кор., 149 зач., XI, 23–32." } },//великий Четверток
-		{134,  {91, "Рим., 91 зач., VI, 3–11." } }//великую Субботу
+		{1,    { 0X11, "Деян., 1 зач., I, 1–8." } },   //пасха
+		{2,    { 0X21, "Деян., 2 зач., I, 12–17, 21–26." } },
+		{3,    { 0X41, "Деян., 4 зач., II, 14–21." } },
+		{4,    { 0X51, "Деян., 5 зач., II, 22–36." } },
+		{5,    { 0X61, "Деян., 6 зач., II, 38–43." } },
+		{6,    { 0X71, "Деян., 7 зач., III, 1–8." } },
+		{7,    { 0X81, "Деян., 8 зач., III, 11–16." } },
+		{8,    { 0XE1, "Деян., 14 зач., V, 12–20." } },//Неделя 2, о Фоме
+		{9,    { 0X91, "Деян., 9 зач., III, 19–26." } },
+		{10,   { 0XA1, "Деян., 10 зач., IV, 1–10." } },
+		{11,   { 0XB1, "Деян., 11 зач., IV, 13–22." } },
+		{12,   { 0XC1, "Деян., 12 зач., IV, 23–31." } },
+		{13,   { 0XD1, "Деян., 13 зач., V, 1–11." } },
+		{14,   { 0XF1, "Деян., 15 зач., V, 21–33." } },
+		{15,   { 0X101, "Деян., 16 зач., VI, 1-7." } },//Неделя 3, о мироносицах
+		{16,   { 0X111, "Деян., 17 зач., VI, 8 – VII, 5, 47–60." } },
+		{17,   { 0X121, "Деян., 18 зач., VIII, 5–17." } },
+		{18,   { 0X131, "Деян., 19 зач., VIII, 18–25." } },
+		{19,   { 0X141, "Деян., 20 зач., VIII, 26–39." } },
+		{20,   { 0X151, "Деян., 21 зач., VIII, 40 – IX, 19." } },
+		{21,   { 0X161, "Деян., 22 зач., IX, 19–31." } },
+		{22,   { 0X171, "Деян., 23 зач., IX, 32-42." } },//Неделя 4, о разслабленнем
+		{23,   { 0X181, "Деян., 24 зач., X, 1–16." } },
+		{24,   { 0X191, "Деян., 25 зач., X, 21–33." } },
+		{25,   { 0X221, "Деян., 34 зач., XIV, 6–18." } },
+		{26,   { 0X1A1, "Деян., 26 зач., X, 34–43." } },
+		{27,   { 0X1B1, "Деян., 27 зач., X, 44 – XI, 10." } },
+		{28,   { 0X1D1, "Деян., 29 зач., XII, 1–11." } },
+		{29,   { 0X1C1, "Деян., 28 зач., XI, 19–26, 29–30." } },//Неделя 5, о самаряныни
+		{30,   { 0X1E1, "Деян., 30 зач., XII, 12–17." } },
+		{31,   { 0X1F1, "Деян., 31 зач., XII, 25 – XIII, 12." } },
+		{32,   { 0X201, "Деян., 32 зач., XIII, 13–24." } },
+		{33,   { 0X231, "Деян., 35 зач., XIV, 20–27." } },
+		{34,   { 0X241, "Деян., 36 зач., XV, 5–34." } },
+		{35,   { 0X251, "Деян., 37 зач., XV, 35–41." } },
+		{36,   { 0X261, "Деян., 38 зач., XVI, 16–34." } },//Неделя 6, о слепом
+		{37,   { 0X271, "Деян., 39 зач., XVII, 1–15." } },
+		{38,   { 0X281, "Деян., 40 зач., XVII, 19-28." } },
+		{39,   { 0X291, "Деян., 41 зач., XVIII, 22–28." } },
+		{40,   { 0X11, "Деян., 1 зач., I, 1–12." } },//Вознесение Господне
+		{41,   { 0X2A1, "Деян., 42 зач., XIX, 1–8." } },
+		{42,   { 0X2B1, "Деян., 43 зач., XX, 7–12." } },
+		{43,   { 0X2C1, "Деян., 44 зач., XX, 16-18, 28-36." } },//Неделя 7, святых отец
+		{44,   { 0X2D1, "Деян., 45 зач., XXI, 8–14." } },
+		{45,   { 0X2E1, "Деян., 46 зач., XXI, 26–32." } },
+		{46,   { 0X2F1, "Деян., 47 зач., XXIII, 1–11." } },
+		{47,   { 0X301, "Деян., 48 зач., XXV, 13–19." } },
+		{48,   { 0X321, "Деян., 50 зач., XXVII, 1–44." } },
+		{49,   { 0X331, "Деян., 51 зач., XXVIII, 1–31." } },
+		{92,   { 0X12F1, "Евр., 303 зач., I, 1–12." } },//Суббота первая поста
+		{93,   { 0X1491, "Евр., 329 зач., XI, 24-26, 32 - XII, 2." } },//Неделя первая поста
+		{99,   { 0X1351, "Евр., 309 зач., III, 12–16." } },//Суббота вторая поста
+		{100,  { 0X1301, "Евр., 304 зач., I, 10 – II, 3." } },//Неделя вторая поста
+		{106,  { 0X1451, "Евр., 325 зач., X, 32–38." } },//Суббота третия поста
+		{107,  { 0X1371, "Евр., 311 зач., IV, 14 – V, 6." } },//Неделя третия поста
+		{113,  { 0X1391, "Евр., 313 зач., VI, 9–12." } },//Суббота четвертая поста
+		{114,  { 0X13A1, "Евр., 314 зач., VI, 13–20." } },//Неделя четвертая постa
+		{120,  { 0X1421, "Евр., 322 зач., IX, 24–28." } },//Суббота пятая поста
+		{121,  { 0X1411, "Евр., 321 зач., IX, 11-14." } },//Неделя пятая поста
+		{127,  { 0X14D1, "Евр., 333 зач., XII, 28 - XIII, 8." } },//Суббота шестая Лазарева
+		{128,  { 0XF71, "Флп., 247 зач., IV, 4-9." } },//В неделю цветоносную
+		{132,  { 0X951, "1 Кор., 149 зач., XI, 23–32." } },//великий Четверток
+		{134,  { 0X5B1, "Рим., 91 зач., VI, 3–11." } }//великую Субботу
+
 	};
 	auto apostol_table2_get_chteniya = [](const std::set<uint16_t>& markers)->ApEvReads {
 		ApEvReads res{};
@@ -1105,7 +1208,7 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 	std::multimap<uint16_t, ShortDate> markers;
 	const auto pasha_date = pasha_calc(y);
 	const auto pasha_date_pred = pasha_calc(y-1);
-	auto is_visokos = [](int g) { return (g%4)==0; };
+	auto is_visokos = [](const big_int& y) { return (y%4)==0; };
 	const bool b = is_visokos(y);
 	const bool b1 = is_visokos(y-1);
 	ShortDate ned_pr, nachalo_posta, t1, t2, t3;
@@ -1185,7 +1288,9 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 	//функц.создание карты дней недели указанного года в формате:
 	//key - дата; key.first - месяц; key.second - день
 	//value - деньнедели; 0-вс, 1-пн, 2-вт, 3-ср, 4-чт, 5-пт, 6-сб.
-	auto create_days_map_ = [&increment_date_, &decrement_date_, &is_visokos](int y) -> std::optional<std::map<ShortDate, int8_t>> {
+	auto create_days_map_ = [&increment_date_, &decrement_date_, &is_visokos, this]
+													(const big_int& y) -> std::optional<std::map<ShortDate, int8_t>>
+	{
 		if(y<1) return std::nullopt;
 		const bool b = is_visokos(y);
 		const auto pasha_date = pasha_calc(y) ;
@@ -2203,7 +2308,7 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 	} while(ddd!=t3);
 	int sn   {17-i};//кол-во седмиц осенней отступки/преступки  пред. года
 	int osen {17 - get_n50_(ned_po_vozdv)};//тоже для текущего года
-	int zimn {};//расчет кол-во седмиц зимней отступки (А.Кашкин - стр.126)...
+	int zimn {};//расчет кол-во седмиц зимней отступки (А.Кашкин - стр.126)
 	if( !(dd==d2 && kdn!=0 && kdn!=1) ) {
 		if( dd==d2 && (kdn==0||kdn==1) ) zimn--;
 		if( dd!=d2 ) {
@@ -2415,25 +2520,6 @@ OrthYear::OrthYear(int y, std::span<const int> il, bool osen_otstupka_apostol)
 	data2.shrink_to_fit();
 }//end OrthYear ctor
 
-std::optional<decltype(OrthYear::data1)::const_iterator> OrthYear::find_in_data1(int8_t m, int8_t d) const
-{
-	auto dd = ShortDate{m, d};
-	auto fr = std::lower_bound(data1.begin(), data1.end(), dd);
-	if(fr==data1.end()) return std::nullopt;
-	if( !(*fr==dd) ) return std::nullopt;
-	return fr;
-}
-
-int8_t OrthYear::get_winter_indent() const
-{
-	return winter_indent;
-}
-
-int8_t OrthYear::get_spring_indent() const
-{
-	return spring_indent;
-}
-
 int8_t OrthYear::get_date_glas(int8_t month, int8_t day) const
 {
 	if(auto fr = find_in_data1(month, day); fr) {
@@ -2485,27 +2571,27 @@ ApEvReads OrthYear::get_resurrect_evangelie(int8_t month, int8_t day) const
 	if(dn != 0) return {};
 	//таблица 11-и воскресныx утрених евангелий
 	static const std::array resurrect_evangelie_table = {
-		ApEvReads{ 116, "Мф., 116 зач., XXVIII, 16–20." },
-		ApEvReads{ 70 , "Мк., 70 зач., XVI, 1–8." },
-		ApEvReads{ 71 , "Мк., 71 зач., XVI, 9–20." },
-		ApEvReads{ 112, "Лк., 112 зач., XXIV, 1–12." },
-		ApEvReads{ 113, "Лк., 113 зач., XXIV, 12–35." },
-		ApEvReads{ 114, "Лк., 114 зач., XXIV, 36–53." },
-		ApEvReads{ 63 , "Ин., 63 зач., XX, 1–10." },
-		ApEvReads{ 64 , "Ин., 64 зач., XX, 11–18." },
-		ApEvReads{ 65 , "Ин., 65 зач., XX, 19–31." },
-		ApEvReads{ 66 , "Ин., 66 зач., XXI, 1–14." },
-		ApEvReads{ 67 , "Ин., 67 зач., XXI, 15–25." }
+		ApEvReads{ 2116, "Мф., 116 зач., XXVIII, 16–20." },
+		ApEvReads{ 370 , "Мк., 70 зач., XVI, 1–8." },
+		ApEvReads{ 371 , "Мк., 71 зач., XVI, 9–20." },
+		ApEvReads{ 4112, "Лк., 112 зач., XXIV, 1–12." },
+		ApEvReads{ 4113, "Лк., 113 зач., XXIV, 12–35." },
+		ApEvReads{ 4114, "Лк., 114 зач., XXIV, 36–53." },
+		ApEvReads{ 563 , "Ин., 63 зач., XX, 1–10." },
+		ApEvReads{ 564 , "Ин., 64 зач., XX, 11–18." },
+		ApEvReads{ 565 , "Ин., 65 зач., XX, 19–31." },
+		ApEvReads{ 566 , "Ин., 66 зач., XXI, 1–14." },
+		ApEvReads{ 567 , "Ин., 67 зач., XXI, 15–25." }
 	};
 	//таблица праздничных утрених евангелий
 	static const std::array holydays_evangelie_table = {
-		ApEvReads{  83, "Мф., 83 зач., XXI, 1–11, 15–17." },//Вербное воскресенье
-		ApEvReads{   2, "Мк., 2 зач., I, 9–11." },          //Крещение
-		ApEvReads{   8, "Лк., 8 зач., II, 25–32."},         //Сре́тение
-		ApEvReads{   4, "Лк., 4 зач., I, 39–49, 56."},      //Благовещ́ение, Успе́ние, Рождество, Введе́ние Пресв.Богородицы
-		ApEvReads{  45, "Лк., 45 зач., IX, 28–36."},        //Преображение
-		ApEvReads{  42, "Ин., 42 зач., XII, 28-36."},       //Воздви́жение
-		ApEvReads{   2, "Мф., 2 зач., I, 18–25."}           //Рождество
+		ApEvReads{  283, "Мф., 83 зач., XXI, 1–11, 15–17." },//Вербное воскресенье
+		ApEvReads{   32, "Мк., 2 зач., I, 9–11." },          //Крещение
+		ApEvReads{   48, "Лк., 8 зач., II, 25–32."},         //Сре́тение
+		ApEvReads{   44, "Лк., 4 зач., I, 39–49, 56."},      //Благовещ́ение, Успе́ние, Рождество, Введе́ние Пресв.Богородицы
+		ApEvReads{  445, "Лк., 45 зач., IX, 28–36."},        //Преображение
+		ApEvReads{  542, "Ин., 42 зач., XII, 28-36."},       //Воздви́жение
+		ApEvReads{   22, "Мф., 2 зач., I, 18–25."}           //Рождество
 	};
 	static const std::array unique_evangelie_table = {
 		ned2_popashe,
@@ -2604,14 +2690,14 @@ std::optional<std::vector<ShortDate>> OrthYear::get_alldates_with(uint16_t m) co
 	return res;
 }
 
-std::optional<ShortDate> OrthYear::get_date_withanyof(std::span<uint16_t> m) const
+std::optional<ShortDate> OrthYear::get_date_withanyof(std::span<const uint16_t> m) const
 {
 	if(m.empty()) return std::nullopt;
 	for(auto i: m) { if(auto x = get_date_with(i); x) return *x; }
 	return std::nullopt;
 }
 
-std::optional<ShortDate> OrthYear::get_date_withallof(std::span<uint16_t> m) const
+std::optional<ShortDate> OrthYear::get_date_withallof(std::span<const uint16_t> m) const
 {
 	if(m.empty()) return std::nullopt;
 	auto semires = get_alldates_with(m.front());
@@ -2630,7 +2716,7 @@ std::optional<ShortDate> OrthYear::get_date_withallof(std::span<uint16_t> m) con
 	return std::nullopt;
 }
 
-std::optional<std::vector<ShortDate>> OrthYear::get_alldates_withanyof(std::span<uint16_t> m) const
+std::optional<std::vector<ShortDate>> OrthYear::get_alldates_withanyof(std::span<const uint16_t> m) const
 {
 	if(m.empty()) return std::nullopt;
 	std::vector<ShortDate> result;
@@ -2962,209 +3048,325 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
 /*----------------------------------------------------*/
 
 class OrthodoxCalendar::impl {
-	std::map<int, std::unique_ptr<OrthYear>> cache;
-	std::queue<int> cache_elements_queue;
+
+	template< typename FindKey, typename CacheElement >
+	class Cache {
+		size_t size;
+		std::unordered_map<FindKey, std::shared_ptr<CacheElement>> cache;
+		std::queue<typename decltype(cache)::iterator> delete_queue;
+	public:
+		explicit Cache(size_t sz) : size{sz} { cache.reserve(size); }//disable Iterator invalidation on insert
+		void clear() { cache.clear(); while(!delete_queue.empty()) delete_queue.pop(); }
+		bool contains(const FindKey& key) const { return cache.contains(key); }
+		template<typename ...Args>
+		std::shared_ptr<CacheElement> get_or_make(const FindKey& key, Args&&... args)
+		{//parameter pack is used for construct CacheElement object if here is no exist
+			auto it = cache.find(key);
+			if(it == cache.end()) {
+				if(cache.size() >= size) {
+					cache.erase(delete_queue.front());
+					delete_queue.pop();
+				}
+				auto [i, ok] = cache.insert({key, std::make_shared<CacheElement>(std::forward<Args>(args)...)});
+				if(!ok) return {};
+				delete_queue.push( i );
+				it = i;
+			}
+			return it->second;
+		}
+	};
+
 	size_t cache_max_elements;
+	mutable Cache<std::string, OrthYear> orthyear_cache;
+	mutable Cache<year_month_day, Jdn> julian_dates_jdn_cache;
+	mutable Cache<year_month_day, Jdn> grigorian_dates_jdn_cache;
+	mutable Cache<year_month_day, year_month_day> julian2grigorian_cache;
+	mutable Cache<year_month_day, year_month_day> grigorian2julian_cache;
 	//настройка номеров добавочных седмиц зимней отступкu литургийных чтений
 	std::array<uint8_t,5> zimn_otstupka_n5; //при отступке в 5 седмиц.
 	std::array<uint8_t,4> zimn_otstupka_n4; //при отступке в 4 седмиц.
 	std::array<uint8_t,3> zimn_otstupka_n3; //при отступке в 3 седмиц.
 	std::array<uint8_t,2> zimn_otstupka_n2; //при отступке в 2 седмиц.
-	uint8_t               zimn_otstupka_n1; //при отступке в 1 седмиц.
+	std::array<uint8_t,1> zimn_otstupka_n1; //при отступке в 1 седмиц.
 	//настройка номеров добавочных седмиц осенней отступкu литургийных чтений
 	std::array<uint8_t,2> osen_otstupka;
 	bool osen_otstupka_apostol; //при вычислении осенней отступкu учитывать ли апостол
-	OrthYear* get_from_cache(int& y, int8_t& m, int8_t& d, const bool julian=true);
-	OrthYear* get_from_cache(int y);
+
 public:
-	explicit impl(size_t sz=3000)
-		: cache_max_elements    {sz>0 ? sz : 1},
-			zimn_otstupka_n5      {30,31,17,32,33},
-			zimn_otstupka_n4      {30,31,32,33},
-			zimn_otstupka_n3      {31,32,33},
-			zimn_otstupka_n2      {32,33},
-			zimn_otstupka_n1      {33},
-			osen_otstupka         {10,11},
-			osen_otstupka_apostol {false}
+
+	explicit impl(size_t sz=10000)
+		: cache_max_elements         {sz>0 ? sz : 1},
+			orthyear_cache             {cache_max_elements},
+			julian_dates_jdn_cache     {cache_max_elements},
+			grigorian_dates_jdn_cache  {cache_max_elements},
+			julian2grigorian_cache     {cache_max_elements},
+			grigorian2julian_cache     {cache_max_elements},
+			zimn_otstupka_n5           {30,31,17,32,33},
+			zimn_otstupka_n4           {30,31,32,33},
+			zimn_otstupka_n3           {31,32,33},
+			zimn_otstupka_n2           {32,33},
+			zimn_otstupka_n1           {33},
+			osen_otstupka              {10,11},
+			osen_otstupka_apostol      {false}
 	{
 	}
-	void set_cache_size(size_t sz);
-	void set_winter_indent_weeks_1(uint8_t w1);
-	void set_winter_indent_weeks_2(uint8_t w1, uint8_t w2);
-	void set_winter_indent_weeks_3(uint8_t w1, uint8_t w2, uint8_t w3);
-	void set_winter_indent_weeks_4(uint8_t w1, uint8_t w2, uint8_t w3, uint8_t w4);
-	void set_winter_indent_weeks_5(uint8_t w1, uint8_t w2, uint8_t w3, uint8_t w4, uint8_t w5);
-	void set_spring_indent_weeks(uint8_t w1, uint8_t w2);
-	void set_spring_indent_apostol(bool value);
-	int8_t winter_indent(int year);
-	int8_t spring_indent(int year);
-	int8_t apostol_post_length(int year);
-	int8_t date_glas(int y, int8_t m, int8_t d, bool julian=true);
-	int8_t date_n50(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<std::vector<uint16_t>> date_properties(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<ApEvReads> date_apostol(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<ApEvReads> date_evangelie(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<ApEvReads> resurrect_evangelie(int y, int8_t m, int8_t d, bool julian=true);
-	std::optional<year_month_day> get_date_with(int year, uint16_t property, bool julian=true);
-	std::optional<std::vector<year_month_day>> get_alldates_with(int year, uint16_t property, bool julian=true);
-	std::optional<year_month_day> get_date_withanyof(int year, std::span<uint16_t> properties, bool julian=true);
-	std::optional<year_month_day> get_date_withallof(int year, std::span<uint16_t> properties, bool julian=true);
-	std::optional<std::vector<year_month_day>> get_alldates_withanyof(int year, std::span<uint16_t> properties, bool julian=true);
-	std::string get_description_for_date(int year, int8_t month, int8_t day, bool julian=true);
-	std::string get_description_for_dates(std::span<year_month_day> d, const std::string& separator, bool julian=true);
+	bool set_winter_indent_weeks_1(const uint8_t w1);
+	bool set_winter_indent_weeks_2(const uint8_t w1, const uint8_t w2);
+	bool set_winter_indent_weeks_3(const uint8_t w1, const uint8_t w2, const uint8_t w3);
+	bool set_winter_indent_weeks_4(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4);
+	bool set_winter_indent_weeks_5(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4, const uint8_t w5);
+	bool set_spring_indent_weeks(const uint8_t w1, const uint8_t w2);
+	void set_spring_indent_apostol(const bool value);
+	std::pair<std::vector<uint8_t>, bool> get_options() const;
+	std::pair<int8_t, int8_t> julian_pascha(const std::string& year) const;
+	year_month_day pascha(const std::string& year, const bool julian=true) const;
+	std::string jdn_for_date(const std::string& year, const int8_t m, const int8_t d, const bool julian=true) const;
+	year_month_day grigorian_to_julian(const std::string& y, const int8_t m, const int8_t d) const;
+	year_month_day julian_to_grigorian(const std::string& y, const int8_t m, const int8_t d) const;
+	int8_t winter_indent(const std::string& year) const;
+	int8_t spring_indent(const std::string& year) const;
+	int8_t apostol_post_length(const std::string& year) const;
+	int8_t date_glas(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	int8_t date_n50(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	int8_t weekday_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<std::vector<uint16_t>> date_properties(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<ApEvReads> date_apostol(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<ApEvReads> date_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<ApEvReads> resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::optional<year_month_day> get_date_with(const std::string& year, const uint16_t property, const bool julian=true) const;
+	std::optional<std::vector<year_month_day>> get_alldates_with(const std::string& year, const uint16_t property, const bool julian=true) const;
+	std::optional<year_month_day> get_date_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
+	std::optional<year_month_day> get_date_withallof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
+	std::optional<std::vector<year_month_day>> get_alldates_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
+	std::string get_description_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	std::string get_description_for_dates(std::span<const year_month_day> days, const bool julian=true, const std::string separator="\n") const;
+
+private:
+
+	template<typename T> bool set_indent_week_numbers_option(T& container, std::initializer_list<uint8_t> il)
+	{
+		if( std::any_of(il.begin(), il.end(), [](auto i){ return i<1 || i>33; }) ) return false;
+		if( !std::equal(container.cbegin(), container.cend(), il.begin()) ) {
+			std::copy(il.begin(), il.end(), container.begin());
+			orthyear_cache.clear();
+		}
+		return true;
+	}
+
+	int8_t get_indent_for_year(const std::string& year, const bool winter=true) const
+	{
+		if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
+			if(winter) return p->get_winter_indent() ;
+			else return p->get_spring_indent() ;
+		}
+		return std::numeric_limits<int8_t>::max();
+	}
+
+	using MethodPtr1 = int8_t (OrthYear::*)(int8_t, int8_t) const;
+	int8_t get_date_char(const std::string& y, const int8_t m, const int8_t d, const bool julian, MethodPtr1 mptr) const
+	{
+		year_month_day ymd {y, m, d};
+		if(!julian) ymd = grigorian_to_julian(y, m, d);
+		std::string& year = ymd.year;
+		if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
+			auto* rawptr = p.get();
+			return (rawptr->*mptr)(ymd.month, ymd.day);
+		}
+		return -1;
+	}
+
+	using MethodPtr2 = ApEvReads (OrthYear::*)(int8_t, int8_t) const;
+	std::optional<ApEvReads> get_date_reads(const std::string& y, const int8_t m, const int8_t d, const bool julian, MethodPtr2 mptr) const
+	{
+		year_month_day ymd {y, m, d};
+		if(!julian) ymd = grigorian_to_julian(y, m, d);
+		std::string& year = ymd.year;
+		if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
+			auto* rawptr = p.get();
+			auto res = (rawptr->*mptr)(ymd.month, ymd.day);
+			if(res.n < 1) return std::nullopt;
+			return res;
+		}
+		return std::nullopt;
+	}
 };
 
-OrthYear* OrthodoxCalendar::impl::get_from_cache(int y)
+bool OrthodoxCalendar::impl::set_winter_indent_weeks_1(const uint8_t w1)
 {
-	auto it = cache.find(y);
-	if(it == cache.end()) {
-		if(cache.size() >= cache_max_elements) {
-			cache.erase(cache_elements_queue.front());
-			cache_elements_queue.pop();
-		}
-		std::vector<int> weekns; weekns.reserve(17); //week numbers
-		weekns.push_back(zimn_otstupka_n1);
-		for(int i : zimn_otstupka_n2) weekns.push_back(i);
-		for(int i : zimn_otstupka_n3) weekns.push_back(i);
-		for(int i : zimn_otstupka_n4) weekns.push_back(i);
-		for(int i : zimn_otstupka_n5) weekns.push_back(i);
-		for(int i : osen_otstupka)    weekns.push_back(i);
-		auto [it1, ok] = cache.insert({y, std::make_unique<OrthYear>(y, weekns, osen_otstupka_apostol)});
-		if(!ok) return nullptr;
-		it = it1;
-		cache_elements_queue.push(y);
-	}
-	return it->second.get();
+	return set_indent_week_numbers_option(zimn_otstupka_n1, {w1});
 }
 
-OrthYear* OrthodoxCalendar::impl::get_from_cache(int& y, int8_t& m, int8_t& d, const bool julian)
+bool OrthodoxCalendar::impl::set_winter_indent_weeks_2(const uint8_t w1, const uint8_t w2)
 {
-	if(!julian) {
-		auto ymd = OrthodoxCalendar::grigorian_to_julian(y, m, d);
-		y = ymd.year;
-		m = ymd.month;
-		d = ymd.day;
-	}
-	std::cout<<y<<std::endl;
-	return get_from_cache(y);
+	return set_indent_week_numbers_option(zimn_otstupka_n2, {w1, w2});
 }
 
-void OrthodoxCalendar::impl::set_cache_size(size_t sz)
+bool OrthodoxCalendar::impl::set_winter_indent_weeks_3(const uint8_t w1, const uint8_t w2, const uint8_t w3)
 {
-	cache_max_elements = sz;
-	while( cache.size() > sz ) {
-		cache.erase(cache_elements_queue.front());
-		cache_elements_queue.pop();
-	}
+	return set_indent_week_numbers_option(zimn_otstupka_n3, {w1, w2, w3});
 }
 
-void OrthodoxCalendar::impl::set_winter_indent_weeks_1(uint8_t w1)
+bool OrthodoxCalendar::impl::set_winter_indent_weeks_4(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4)
 {
-	if(w1 != zimn_otstupka_n1) {
-		zimn_otstupka_n1 = w1;
-		cache.clear();
-		while(!cache_elements_queue.empty()) cache_elements_queue.pop();
-	}
+	return set_indent_week_numbers_option(zimn_otstupka_n4, {w1, w2, w3, w4});
 }
 
-void OrthodoxCalendar::impl::set_winter_indent_weeks_2(uint8_t w1, uint8_t w2)
+bool OrthodoxCalendar::impl::set_winter_indent_weeks_5(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4, const uint8_t w5)
 {
-	std::array<uint8_t,2> x {w1, w2};
-	if( !std::equal(zimn_otstupka_n2.begin(), zimn_otstupka_n2.end(), x.begin()) ) {
-		std::copy(x.begin(), x.end(), zimn_otstupka_n2.begin());
-		cache.clear();
-		while(!cache_elements_queue.empty()) cache_elements_queue.pop();
-	}
+	return set_indent_week_numbers_option(zimn_otstupka_n5, {w1, w2, w3, w4, w5});
 }
 
-void OrthodoxCalendar::impl::set_winter_indent_weeks_3(uint8_t w1, uint8_t w2, uint8_t w3)
+bool OrthodoxCalendar::impl::set_spring_indent_weeks(const uint8_t w1, const uint8_t w2)
 {
-	std::array<uint8_t,3> x {w1, w2, w3};
-	if( !std::equal(zimn_otstupka_n3.begin(), zimn_otstupka_n3.end(), x.begin()) ) {
-		std::copy(x.begin(), x.end(), zimn_otstupka_n3.begin());
-		cache.clear();
-		while(!cache_elements_queue.empty()) cache_elements_queue.pop();
-	}
+	return set_indent_week_numbers_option(osen_otstupka, {w1, w2});
 }
 
-void OrthodoxCalendar::impl::set_winter_indent_weeks_4(uint8_t w1, uint8_t w2, uint8_t w3, uint8_t w4)
-{
-	std::array<uint8_t,4> x {w1, w2, w3, w4};
-	if( !std::equal(zimn_otstupka_n4.begin(), zimn_otstupka_n4.end(), x.begin()) ) {
-		std::copy(x.begin(), x.end(), zimn_otstupka_n4.begin());
-		cache.clear();
-		while(!cache_elements_queue.empty()) cache_elements_queue.pop();
-	}
-}
-
-void OrthodoxCalendar::impl::set_winter_indent_weeks_5(uint8_t w1, uint8_t w2, uint8_t w3, uint8_t w4, uint8_t w5)
-{
-	std::array<uint8_t,5> x {w1, w2, w3, w4, w5};
-	if( !std::equal(zimn_otstupka_n5.begin(), zimn_otstupka_n5.end(), x.begin()) ) {
-		std::copy(x.begin(), x.end(), zimn_otstupka_n5.begin());
-		cache.clear();
-		while(!cache_elements_queue.empty()) cache_elements_queue.pop();
-	}
-}
-
-void OrthodoxCalendar::impl::set_spring_indent_weeks(uint8_t w1, uint8_t w2)
-{
-	std::array<uint8_t,2> x {w1, w2};
-	if( !std::equal(osen_otstupka.begin(), osen_otstupka.end(), x.begin()) ) {
-		std::copy(x.begin(), x.end(), osen_otstupka.begin());
-		cache.clear();
-		while(!cache_elements_queue.empty()) cache_elements_queue.pop();
-	}
-}
-
-void OrthodoxCalendar::impl::set_spring_indent_apostol(bool value)
+void OrthodoxCalendar::impl::set_spring_indent_apostol(const bool value)
 {
 	if(value != osen_otstupka_apostol) {
 		osen_otstupka_apostol = value;
-		cache.clear();
-		while(!cache_elements_queue.empty()) cache_elements_queue.pop();
+		orthyear_cache.clear();
 	}
 }
 
-int8_t OrthodoxCalendar::impl::winter_indent(int year)
+std::pair<std::vector<uint8_t>, bool> OrthodoxCalendar::impl::get_options() const
 {
-	if(OrthYear* p = get_from_cache(year); p) {
-		return p->get_winter_indent() ;
+	std::vector<uint8_t> first_res(17, 0);
+	auto it = first_res.begin();
+	it = std::copy(zimn_otstupka_n1.begin(), zimn_otstupka_n1.end(), it);
+	it = std::copy(zimn_otstupka_n2.begin(), zimn_otstupka_n2.end(), it);
+	it = std::copy(zimn_otstupka_n3.begin(), zimn_otstupka_n3.end(), it);
+	it = std::copy(zimn_otstupka_n4.begin(), zimn_otstupka_n4.end(), it);
+	it = std::copy(zimn_otstupka_n5.begin(), zimn_otstupka_n5.end(), it);
+	it = std::copy(osen_otstupka.begin(), osen_otstupka.end(), it);
+	return {first_res, osen_otstupka_apostol};
+}
+
+std::pair<int8_t, int8_t> OrthodoxCalendar::impl::julian_pascha(const std::string& year) const
+{
+	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
+		auto [month, day] = (p->get_date_with(oxc::pasha)).value();
+		return {month, day};
+	}
+	return {};
+}
+
+year_month_day OrthodoxCalendar::impl::pascha(const std::string& year, const bool julian) const
+{
+	auto [month, day] = julian_pascha(year);
+	if(julian) {
+		return {year, month, day};
 	} else {
-		return std::numeric_limits<int8_t>::max();
+		return julian_to_grigorian(year, month, day);
 	}
 }
 
-int8_t OrthodoxCalendar::impl::spring_indent(int year)
+std::string OrthodoxCalendar::impl::jdn_for_date(const std::string& year, const int8_t m, const int8_t d, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(year); p) {
-		return p->get_spring_indent() ;
+	year_month_day ymd {year, m, d};
+	using T = decltype(julian_dates_jdn_cache) ;
+	T OrthodoxCalendar::impl::* cache_ptr = &OrthodoxCalendar::impl::julian_dates_jdn_cache;
+	if(!julian) cache_ptr = &OrthodoxCalendar::impl::grigorian_dates_jdn_cache;
+	T& obj = const_cast<OrthodoxCalendar::impl*>(this)->*cache_ptr;
+	if(auto p=obj.get_or_make(ymd, year, m, d, julian); p) {
+		return p->str();
 	} else {
-		return std::numeric_limits<int8_t>::max();
+		return {};
 	}
 }
 
-int8_t OrthodoxCalendar::impl::apostol_post_length(int year)
+year_month_day OrthodoxCalendar::impl::grigorian_to_julian(const std::string& y, const int8_t m, const int8_t d) const
 {
-	auto dec_date_by_one = [](int& y, int8_t& m, int8_t& d)
+	year_month_day ymd {y, m, d};
+	if( grigorian2julian_cache.contains(ymd) ) {
+		if( auto p=grigorian2julian_cache.get_or_make(ymd); p ) {
+			return *p;
+		} else {
+			return {};
+		}
+	} else {
+  	big_int a = big_int(32082) + big_int(jdn_for_date(y, m, d, false));
+  	big_int b = (big_int(4)*a + big_int(3)) / big_int(1461);
+  	big_int c = (big_int(1461)*b) / big_int(4) ;
+  	c = a - c;
+  	big_int x1 = (big_int(5)*c + big_int(2)) / big_int(153);
+  	big_int x2 = (big_int(153)*x1 + big_int(2)) / big_int(5);
+  	x2 = c - x2 + 1;
+  	int8_t day = static_cast<int8_t>(x2);
+  	big_int x3 = x1 / big_int(10);
+  	big_int x4 = x1 + big_int(3) - big_int(12)*x3;
+  	int8_t month = static_cast<int8_t>(x4);
+  	big_int x5 = b - big_int(4800) + x3;
+		if( auto p=grigorian2julian_cache.get_or_make(ymd, x5.str(), month, day); p ) {
+			return *p;
+		} else {
+			return {};
+		}
+	}
+}
+
+year_month_day OrthodoxCalendar::impl::julian_to_grigorian(const std::string& y, const int8_t m, const int8_t d) const
+{
+	year_month_day ymd {y, m, d};
+	if( julian2grigorian_cache.contains(ymd) ) {
+		if( auto p=julian2grigorian_cache.get_or_make(ymd); p ) {
+			return *p;
+		} else {
+			return {};
+		}
+	} else {
+  	big_int a = big_int(32044) + big_int(jdn_for_date(y, m, d));
+  	big_int b = (big_int(4)*a + big_int(3)) / big_int(146097);
+  	big_int c = (big_int(146097)*b) / big_int(4) ;
+  	c = a - c;
+  	big_int x1 = (big_int(4)*c + big_int(3)) / big_int(1461);
+  	big_int x2 = (big_int(1461)*x1) / big_int(4);
+  	x2 = c - x2;
+  	big_int x3 = (big_int(5)*x2 + big_int(2)) / big_int(153);
+  	big_int x4 = (big_int(153)*x3 + big_int(2)) / big_int(5);
+  	x4 = x2 - x4 + 1;
+  	int8_t day = static_cast<int8_t>(x4);
+  	big_int x5 = x3 / big_int(10);
+  	big_int x6 = x3 + big_int(3) - x5*big_int(12);
+  	int8_t month = static_cast<int8_t>(x6);
+  	big_int x7 = b*big_int(100) + x1 - big_int(4800) + x5;
+  	if( auto p=julian2grigorian_cache.get_or_make(ymd, x7.str(), month, day); p ) {
+			return *p;
+		} else {
+			return {};
+		}
+	}
+}
+
+int8_t OrthodoxCalendar::impl::winter_indent(const std::string& year) const
+{
+	return get_indent_for_year(year);
+}
+
+int8_t OrthodoxCalendar::impl::spring_indent(const std::string& year) const
+{
+	return get_indent_for_year(year, false);
+}
+
+int8_t OrthodoxCalendar::impl::apostol_post_length(const std::string& year) const
+{
+	auto dec_date_by_one = [](int8_t& m, int8_t& d, const bool leap)
 	{
 		d--;
 		if(d < 1) {
 			m--;
-			if(m<1) {
-				y--;
-				m = 12;
-			}
-			d += OrthodoxCalendar::month_length(m, OrthodoxCalendar::is_leap_year(y, true));
+			if(m<1) m = 12;
+			d += OrthodoxCalendar::month_length(m, leap);
 		}
 	};
-	if(OrthYear* p = get_from_cache(year); p) {
+	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
 		auto d1 = p->get_date_with(oxc::ned1_po50);
 		auto d2 = p->get_date_with(oxc::m6d29);
 		if(d1 && d2) {
-			int days_count{};
+			const bool b = OrthodoxCalendar::is_leap_year(year);
+			int8_t days_count{};
 			do {
-				dec_date_by_one(year, d2->first, d2->second);
+				dec_date_by_one(d2->first, d2->second, b);
 				days_count++;
 			} while(*d1 != *d2);
 			return days_count-1;
@@ -3173,203 +3375,166 @@ int8_t OrthodoxCalendar::impl::apostol_post_length(int year)
 	return 0;
 }
 
-int8_t OrthodoxCalendar::impl::date_glas(int y, int8_t m, int8_t d, bool julian)
+int8_t OrthodoxCalendar::impl::date_glas(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(y, m, d, julian); p) {
-		return p->get_date_glas(m, d);
-	} else {
-		return -1;
-	}
+	return get_date_char(y, m, d, julian, &OrthYear::get_date_glas);
 }
 
-int8_t OrthodoxCalendar::impl::date_n50(int y, int8_t m, int8_t d, bool julian)
+int8_t OrthodoxCalendar::impl::date_n50(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(y, m, d, julian); p) {
-		return p->get_date_n50(m, d);
-	} else {
-		return -1;
-	}
+	return get_date_char(y, m, d, julian, &OrthYear::get_date_n50);
 }
 
-std::optional<std::vector<uint16_t>> OrthodoxCalendar::impl::date_properties(int y, int8_t m, int8_t d, bool julian)
+int8_t OrthodoxCalendar::impl::weekday_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(y, m, d, julian); p) {
-		return p->get_date_properties(m, d);
-	} else {
-		return std::nullopt;
-	}
+	return get_date_char(y, m, d, julian, &OrthYear::get_date_dn);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::impl::date_apostol(int y, int8_t m, int8_t d, bool julian)
+std::optional<std::vector<uint16_t>> OrthodoxCalendar::impl::date_properties(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(y, m, d, julian); p) {
-		auto res = p->get_date_apostol(m, d);
-		if(res.n < 1) return std::nullopt;
-		return res;
-	} else {
-		return std::nullopt;
+	year_month_day ymd {y, m, d};
+	if(!julian) ymd = grigorian_to_julian(y, m, d);
+	std::string& year = ymd.year;
+	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
+		return p->get_date_properties(ymd.month, ymd.day);
 	}
+	return std::nullopt;
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::impl::date_evangelie(int y, int8_t m, int8_t d, bool julian)
+std::optional<ApEvReads> OrthodoxCalendar::impl::date_apostol(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(y, m, d, julian); p) {
-		auto res = p->get_date_evangelie(m, d);
-		if(res.n < 1) return std::nullopt;
-		return res;
-	} else {
-		return std::nullopt;
-	}
+	return get_date_reads(y, m, d, julian, &OrthYear::get_date_apostol);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::impl::resurrect_evangelie(int y, int8_t m, int8_t d, bool julian)
+std::optional<ApEvReads> OrthodoxCalendar::impl::date_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(y, m, d, julian); p) {
-		auto res = p->get_resurrect_evangelie(m, d);
-		if(res.n < 1) return std::nullopt;
-		return res;
-	} else {
-		return std::nullopt;
-	}
+	return get_date_reads(y, m, d, julian, &OrthYear::get_date_evangelie);
 }
 
-std::optional<year_month_day> OrthodoxCalendar::impl::get_date_with(int year, uint16_t property, bool julian)
+std::optional<ApEvReads> OrthodoxCalendar::impl::resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(year); p) {
+	return get_date_reads(y, m, d, julian, &OrthYear::get_resurrect_evangelie);
+}
+
+std::optional<year_month_day> OrthodoxCalendar::impl::get_date_with(const std::string& year, const uint16_t property, const bool julian) const
+{
+	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
 		if(auto x = p->get_date_with(property); x) {
 			if(julian) return year_month_day{year, x->first, x->second};
-			else return OrthodoxCalendar::julian_to_grigorian(year, x->first, x->second);
-		} else {
-			return std::nullopt;
+			else return julian_to_grigorian(year, x->first, x->second);
 		}
-	} else {
-		return std::nullopt;
 	}
+	return std::nullopt;
 }
 
-std::optional<std::vector<year_month_day>> OrthodoxCalendar::impl::get_alldates_with(int year, uint16_t property, bool julian)
+std::optional<std::vector<year_month_day>> OrthodoxCalendar::impl::get_alldates_with(const std::string& year, const uint16_t property, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(year); p) {
+	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
 		if(auto x = p->get_alldates_with(property); x) {
-			std::vector<year_month_day> res (x->size());
+			std::vector<year_month_day> res ;
+			res.reserve(x->size()) ;
 			if(julian) {
-				std::transform(x->begin(), x->end(), res.begin(), [year](const auto& e){
+				std::transform(x->begin(), x->end(), std::back_inserter(res), [&year](const auto& e){
 					return year_month_day{year, e.first, e.second};
 				});
 			} else {
-				std::transform(x->begin(), x->end(), res.begin(), [year](const auto& e){
-					return OrthodoxCalendar::julian_to_grigorian(year, e.first, e.second);
+				std::transform(x->begin(), x->end(), std::back_inserter(res), [&year, this](const auto& e){
+					return julian_to_grigorian(year, e.first, e.second);
 				});
 			}
 			return res;
-		} else {
-			return std::nullopt;
 		}
-	} else {
-		return std::nullopt;
 	}
+	return std::nullopt;
 }
 
-std::optional<year_month_day> OrthodoxCalendar::impl::get_date_withanyof(int year, std::span<uint16_t> properties, bool julian)
+std::optional<year_month_day> OrthodoxCalendar::impl::get_date_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(year); p) {
+	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
 		if(auto x = p->get_date_withanyof(properties); x) {
 			if(julian) return year_month_day{year, x->first, x->second};
-			else return OrthodoxCalendar::julian_to_grigorian(year, x->first, x->second);
-		} else {
-			return std::nullopt;
+			else return julian_to_grigorian(year, x->first, x->second);
 		}
-	} else {
-		return std::nullopt;
 	}
+	return std::nullopt;
 }
 
-std::optional<year_month_day> OrthodoxCalendar::impl::get_date_withallof(int year, std::span<uint16_t> properties, bool julian)
+std::optional<year_month_day> OrthodoxCalendar::impl::get_date_withallof(const std::string& year, std::span<const uint16_t> properties, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(year); p) {
+	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
 		if(auto x = p->get_date_withallof(properties); x) {
 			if(julian) return year_month_day{year, x->first, x->second};
-			else return OrthodoxCalendar::julian_to_grigorian(year, x->first, x->second);
-		} else {
-			return std::nullopt;
+			else return julian_to_grigorian(year, x->first, x->second);
 		}
-	} else {
-		return std::nullopt;
 	}
+	return std::nullopt;
 }
 
-std::optional<std::vector<year_month_day>> OrthodoxCalendar::impl::get_alldates_withanyof(int year, std::span<uint16_t> properties, bool julian)
+std::optional<std::vector<year_month_day>> OrthodoxCalendar::impl::get_alldates_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(year); p) {
+	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
 		if(auto x = p->get_alldates_withanyof(properties); x) {
-			std::vector<year_month_day> res (x->size());
+			std::vector<year_month_day> res ;
+			res.reserve(x->size()) ;
 			if(julian) {
-				std::transform(x->begin(), x->end(), res.begin(), [year](const auto& e){
+				std::transform(x->begin(), x->end(), std::back_inserter(res), [&year](const auto& e){
 					return year_month_day{year, e.first, e.second};
 				});
 			} else {
-				std::transform(x->begin(), x->end(), res.begin(), [year](const auto& e){
-					return OrthodoxCalendar::julian_to_grigorian(year, e.first, e.second);
+				std::transform(x->begin(), x->end(), std::back_inserter(res), [&year, this](const auto& e){
+					return julian_to_grigorian(year, e.first, e.second);
 				});
 			}
 			return res;
-		} else {
-			return std::nullopt;
 		}
-	} else {
-		return std::nullopt;
 	}
+	return std::nullopt;
 }
 
-std::string OrthodoxCalendar::impl::get_description_for_date(int year, int8_t month, int8_t day, bool julian)
+std::string OrthodoxCalendar::impl::get_description_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	if(OrthYear* p = get_from_cache(year, month, day, julian); p) {
-		return p->get_description_forday(month, day);
-	} else {
-		return {};
+	year_month_day ymd {y, m, d};
+	if(!julian) ymd = grigorian_to_julian(y, m, d);
+	std::string& year = ymd.year;
+	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
+		return p->get_description_forday(ymd.month, ymd.day);
 	}
+	return {};
 }
 
-std::string OrthodoxCalendar::impl::get_description_for_dates(std::span<year_month_day> d, const std::string& separator, bool julian)
+std::string OrthodoxCalendar::impl::get_description_for_dates(std::span<const year_month_day> days, const bool julian, const std::string separator) const
 {
 	std::string res;
-	for(const auto& [yy, mm, dd]: d) {
-		if(auto s = get_description_for_date(yy, mm, dd, julian); !s.empty())
+	for(const auto& e: days) {
+		if(auto s = get_description_for_date(e.year, e.month, e.day, julian); !s.empty())
 			res += s + separator;
 	}
+	if(res.size() > separator.size()) res = res.substr(0, res.size() - separator.size());
 	return res;
 }
 
-/*------------------------------------------------*/
-/*     class OrthodoxCalendar Static Methods      */
-/*------------------------------------------------*/
+/*----------------------------------------------*/
+/*          class OrthodoxCalendar              */
+/*----------------------------------------------*/
 
-year_month_day OrthodoxCalendar::pascha(int year, bool julian)
-{ //using Gauss method
-	if(year<1) return {};
-	int8_t m_=3, p;
-	int a, b, c, d, e;
-	a = year % 19;
-	b = year % 4;
-	c = year % 7;
-	d = (19*a+15) % 30;
-	e = (2*b+4*c+6*d+6) % 7;
-	p = 22 + d + e;
-	if(p>31) {
-		p = d + e - 9;
-		m_ = 4;
-	}
-	if(julian) return { year, m_, p };
-	else return julian_to_grigorian( year, m_, p );
-}
-
-bool OrthodoxCalendar::is_leap_year(int y, bool julian)
+OrthodoxCalendar::OrthodoxCalendar() : pimpl(std::make_unique<impl>())
 {
-	if(julian) return y%4 == 0 ;
-	else return (y%400 == 0) || (y%100 != 0 && y%4 == 0) ;
 }
 
-int8_t OrthodoxCalendar::month_length(int8_t month, bool leap)
+OrthodoxCalendar::~OrthodoxCalendar() = default;
+
+OrthodoxCalendar::OrthodoxCalendar(OrthodoxCalendar&&) = default;
+
+OrthodoxCalendar& OrthodoxCalendar::operator=(OrthodoxCalendar&&) = default;
+
+/*static*/bool OrthodoxCalendar::is_leap_year(const std::string& y, const bool julian)
+{
+	big_int year { string_to_big_int(y) };
+	if(julian) return year%4 == 0 ;
+	else return (year%400 == 0) || (year%100 != 0 && year%4 == 0) ;
+}
+
+/*static*/int8_t OrthodoxCalendar::month_length(const int8_t month, const bool leap)
 {
 	int8_t k{};
 	switch(month) {
@@ -3400,194 +3565,154 @@ int8_t OrthodoxCalendar::month_length(int8_t month, bool leap)
 	return k;
 }
 
-year_month_day OrthodoxCalendar::grigorian_to_julian(int y, int8_t m, int8_t d)
-{
-  uint256_t a = uint256_t(32082) + jdn_for_date(y, m, d, false);
-  uint256_t b = (uint256_t(4)*a + uint256_t(3)) / uint256_t(1461);
-  uint256_t c = (uint256_t(1461)*b) / uint256_t(4) ;
-  c = a - c;
-  uint256_t x1 = (uint256_t(5)*c + uint256_t(2)) / uint256_t(153);
-  uint256_t x2 = (uint256_t(153)*x1 + uint256_t(2)) / uint256_t(5);
-  x2 = c - x2 + 1;
-  d = static_cast<int8_t>(x2);
-  uint256_t x3 = x1 / uint256_t(10);
-  uint256_t x4 = x1 + uint256_t(3) - uint256_t(12)*x3;
-  m = static_cast<int8_t>(x4);
-  uint256_t x5 = b - uint256_t(4800) + x3;
-  y = static_cast<int>(x5);
-  return {y, m, d};
-}
-
-year_month_day OrthodoxCalendar::julian_to_grigorian(int y, int8_t m, int8_t d)
-{
-  uint256_t a = uint256_t(32044) + jdn_for_date(y, m, d);
-  uint256_t b = (uint256_t(4)*a + uint256_t(3)) / uint256_t(146097);
-  uint256_t c = (uint256_t(146097)*b) / uint256_t(4) ;
-  c = a - c;
-  uint256_t x1 = (uint256_t(4)*c + uint256_t(3)) / uint256_t(1461);
-  uint256_t x2 = (uint256_t(1461)*x1) / uint256_t(4);
-  x2 = c - x2;
-  uint256_t x3 = (uint256_t(5)*x2 + uint256_t(2)) / uint256_t(153);
-  uint256_t x4 = (uint256_t(153)*x3 + uint256_t(2)) / uint256_t(5);
-  x4 = x2 - x4 + 1;
-  d = static_cast<int8_t>(x4);
-  uint256_t x5 = x3 / uint256_t(10);
-  uint256_t x6 = x3 + uint256_t(3) - x5*uint256_t(12);
-  m = static_cast<int8_t>(x6);
-  uint256_t x7 = b*uint256_t(100) + x1 - uint256_t(4800) + x5;
-  y = static_cast<int>(x7);
-  return {y, m, d};
-}
-
-int8_t OrthodoxCalendar::weekday_for_date(int y, int8_t m, int8_t d, bool julian)
-{ // return: 0-вс, 1-пн, 2-вт, 3-ср, 4-чт, 5-пт, 6-сб.
-	if(y<1) return -1;
-	uint256_t jdn = jdn_for_date(y, m, d, julian), q, r;
-	boost::multiprecision::divide_qr(jdn, uint256_t(7), q, r);
-	switch(static_cast<int>(r)) {
-		case 0: { return 1; }
-		case 1: { return 2; }
-		case 2: { return 3; }
-		case 3: { return 4; }
-		case 4: { return 5; }
-		case 5: { return 6; }
-		case 6: { return 0; }
-		default: { return -1; }
-	};
-}
-
-/*----------------------------------------------*/
-/*          class OrthodoxCalendar              */
-/*----------------------------------------------*/
-
-OrthodoxCalendar::OrthodoxCalendar() : pimpl(std::make_unique<impl>())
-{
-}
-
-void OrthodoxCalendar::set_cache_size(size_t sz)
-{
-	return pimpl->set_cache_size(sz);
-}
-
-void OrthodoxCalendar::set_winter_indent_weeks_1(uint8_t w1)
+bool OrthodoxCalendar::set_winter_indent_weeks_1(const uint8_t w1)
 {
 	return pimpl->set_winter_indent_weeks_1(w1);
 }
 
-void OrthodoxCalendar::set_winter_indent_weeks_2(uint8_t w1, uint8_t w2)
+bool OrthodoxCalendar::set_winter_indent_weeks_2(const uint8_t w1, const uint8_t w2)
 {
 	return pimpl->set_winter_indent_weeks_2(w1, w2);
 }
 
-void OrthodoxCalendar::set_winter_indent_weeks_3(uint8_t w1, uint8_t w2, uint8_t w3)
+bool OrthodoxCalendar::set_winter_indent_weeks_3(const uint8_t w1, const uint8_t w2, const uint8_t w3)
 {
 	return pimpl->set_winter_indent_weeks_3(w1, w2, w3);
 }
 
-void OrthodoxCalendar::set_winter_indent_weeks_4(uint8_t w1, uint8_t w2, uint8_t w3, uint8_t w4)
+bool OrthodoxCalendar::set_winter_indent_weeks_4(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4)
 {
 	return pimpl->set_winter_indent_weeks_4(w1, w2, w3, w4);
 }
 
-void OrthodoxCalendar::set_winter_indent_weeks_5(uint8_t w1, uint8_t w2, uint8_t w3, uint8_t w4, uint8_t w5)
+bool OrthodoxCalendar::set_winter_indent_weeks_5(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4, const uint8_t w5)
 {
 	return pimpl->set_winter_indent_weeks_5(w1, w2, w3, w4, w5);
 }
 
-void OrthodoxCalendar::set_spring_indent_weeks(uint8_t w1, uint8_t w2)
+bool OrthodoxCalendar::set_spring_indent_weeks(const uint8_t w1, const uint8_t w2)
 {
 	return pimpl->set_spring_indent_weeks(w1, w2);
 }
 
-void OrthodoxCalendar::set_spring_indent_apostol(bool value)
+void OrthodoxCalendar::set_spring_indent_apostol(const bool value)
 {
 	return pimpl->set_spring_indent_apostol(value);
 }
 
-int8_t OrthodoxCalendar::winter_indent(int year)
+std::pair<std::vector<uint8_t>, bool> OrthodoxCalendar::get_options() const
+{
+	return pimpl->get_options();
+}
+
+std::pair<int8_t, int8_t> OrthodoxCalendar::julian_pascha(const std::string& year) const
+{
+	return pimpl->julian_pascha(year);
+}
+
+year_month_day OrthodoxCalendar::pascha(const std::string& year, const bool julian) const
+{
+	return pimpl->pascha(year, julian);
+}
+
+std::string OrthodoxCalendar::jdn_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
+{
+	return pimpl->jdn_for_date(y, m, d, julian);
+}
+
+year_month_day OrthodoxCalendar::grigorian_to_julian(const std::string& y, const int8_t m, const int8_t d) const
+{
+	return pimpl->grigorian_to_julian(y, m, d);
+}
+
+year_month_day OrthodoxCalendar::julian_to_grigorian(const std::string& y, const int8_t m, const int8_t d) const
+{
+	return pimpl->julian_to_grigorian(y, m, d);
+}
+
+int8_t OrthodoxCalendar::winter_indent(const std::string& year) const
 {
 	return pimpl->winter_indent(year);
 }
 
-int8_t OrthodoxCalendar::spring_indent(int year)
+int8_t OrthodoxCalendar::spring_indent(const std::string& year) const
 {
 	return pimpl->spring_indent(year);
 }
 
-int8_t OrthodoxCalendar::apostol_post_length(int year)
+int8_t OrthodoxCalendar::apostol_post_length(const std::string& year) const
 {
 	return pimpl->apostol_post_length(year);
 }
 
-int8_t OrthodoxCalendar::date_glas(int y, int8_t m, int8_t d, bool julian)
+int8_t OrthodoxCalendar::date_glas(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
 	return pimpl->date_glas(y, m, d, julian);
 }
 
-int8_t OrthodoxCalendar::date_n50(int y, int8_t m, int8_t d, bool julian)
+int8_t OrthodoxCalendar::date_n50(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
 	return pimpl->date_n50(y, m, d, julian);
 }
 
-std::optional<std::vector<uint16_t>> OrthodoxCalendar::date_properties(int y, int8_t m, int8_t d, bool julian)
+int8_t OrthodoxCalendar::weekday_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
+{
+	return pimpl->weekday_for_date(y, m, d, julian);
+}
+
+std::optional<std::vector<uint16_t>> OrthodoxCalendar::date_properties(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
 	return pimpl->date_properties(y, m, d, julian);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::date_apostol(int y, int8_t m, int8_t d, bool julian)
+std::optional<ApEvReads> OrthodoxCalendar::date_apostol(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
 	return pimpl->date_apostol(y, m, d, julian);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::date_evangelie(int y, int8_t m, int8_t d, bool julian)
+std::optional<ApEvReads> OrthodoxCalendar::date_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
 	return pimpl->date_evangelie(y, m, d, julian);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::resurrect_evangelie(int y, int8_t m, int8_t d, bool julian)
+std::optional<ApEvReads> OrthodoxCalendar::resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
 	return pimpl->resurrect_evangelie(y, m, d, julian);
 }
 
-std::optional<year_month_day> OrthodoxCalendar::get_date_with(int year, uint16_t property, bool julian)
+std::optional<year_month_day> OrthodoxCalendar::get_date_with(const std::string& year, const uint16_t property, const bool julian) const
 {
 	return pimpl->get_date_with(year, property, julian);
 }
 
-std::optional<std::vector<year_month_day>> OrthodoxCalendar::get_alldates_with(int year, uint16_t property, bool julian)
+std::optional<std::vector<year_month_day>> OrthodoxCalendar::get_alldates_with(const std::string& year, const uint16_t property, const bool julian) const
 {
 	return pimpl->get_alldates_with(year, property, julian);
 }
 
-std::optional<year_month_day> OrthodoxCalendar::get_date_withanyof(int year, std::span<uint16_t> properties, bool julian)
+std::optional<year_month_day> OrthodoxCalendar::get_date_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian) const
 {
 	return pimpl->get_date_withanyof(year, properties, julian);
 }
 
-std::optional<year_month_day> OrthodoxCalendar::get_date_withallof(int year, std::span<uint16_t> properties, bool julian)
+std::optional<year_month_day> OrthodoxCalendar::get_date_withallof(const std::string& year, std::span<const uint16_t> properties, const bool julian) const
 {
 	return pimpl->get_date_withallof(year, properties, julian);
 }
 
-std::optional<std::vector<year_month_day>> OrthodoxCalendar::get_alldates_withanyof(int year, std::span<uint16_t> properties, bool julian)
+std::optional<std::vector<year_month_day>> OrthodoxCalendar::get_alldates_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian) const
 {
 	return pimpl->get_alldates_withanyof(year, properties, julian);
 }
 
-std::string OrthodoxCalendar::get_description_for_date(int year, int8_t month, int8_t day, bool julian)
+std::string OrthodoxCalendar::get_description_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	return pimpl->get_description_for_date(year, month, day, julian);
+	return pimpl->get_description_for_date(y, m, d, julian);
 }
 
-std::string OrthodoxCalendar::get_description_for_dates(std::span<year_month_day> days, bool julian, const std::string separator)
+std::string OrthodoxCalendar::get_description_for_dates(std::span<const year_month_day> days, const bool julian, const std::string separator) const
 {
-	return pimpl->get_description_for_dates(days, separator, julian);
+	return pimpl->get_description_for_dates(days, julian, separator);
 }
-
-OrthodoxCalendar::~OrthodoxCalendar() = default;
-
-OrthodoxCalendar::OrthodoxCalendar(OrthodoxCalendar&&) = default;
-
-OrthodoxCalendar& OrthodoxCalendar::operator=(OrthodoxCalendar&&) = default;
 
 } //namespace oxc
