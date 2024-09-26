@@ -1,29 +1,29 @@
 /*
- * MIT License
- *
- * Copyright (c) 2024 Vladimir Abramov <abramov7613@yandex.ru>
- *
- * Permission is hereby granted, free of charge, to any person
- * obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without
- * restriction, including without limitation the rights to use,
- * copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following
- * conditions:
- *
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
- * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
- */
+		MIT License
+
+		Copyright (c) 2024 Vladimir Abramov <abramov7613@yandex.ru>
+
+		Permission is hereby granted, free of charge, to any person
+		obtaining a copy of this software and associated documentation
+		files (the "Software"), to deal in the Software without
+		restriction, including without limitation the rights to use,
+		copy, modify, merge, publish, distribute, sublicense, and/or sell
+		copies of the Software, and to permit persons to whom the
+		Software is furnished to do so, subject to the following
+		conditions:
+
+		The above copyright notice and this permission notice shall be
+		included in all copies or substantial portions of the Software.
+
+		THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+		EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+		OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+		NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+		HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+		WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+		FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+		OTHER DEALINGS IN THE SOFTWARE.
+*/
 
 #include "oxc.h"
 #include <map>
@@ -247,21 +247,7 @@ class OrthYear {
 	}
 
 public:
-	/*
-	 * 	\brief Конструктор
-	 * 	\param [in] year число года в диапазоне от 2 до ...
-	 * 	\param [in] il список номеров добавочных седмиц при вычислении зимней / осенней отступкu литургийных чтений.
-	 *  \param [in] osen_otstupka_apostol признак указывающий учитывать ли апостол при вычислении осенней отступкu
-	 *  \throw std::runtime_error в случае неверного диапазона входных параметров или если il.size()!=17 или если (il[i] < 1 || il[i] > 33)
-	 *
-	 *	Параметр il должен содержать 17 элементов:<br>
-	 *   первый элемент (index = 0) - номер добавочной седмицы зимней отступкu при отступке в 1 седмиц.<br>
-	 *   второй и третий - номера добавочных седмиц зимней отступкu при отступке в 2 седмиц.<br>
-	 *   следующие 3 элемента - номера добавочных седмиц зимней отступкu при отступке в 3 седмиц.<br>
-	 *   следующие 4 элемента - номера добавочных седмиц зимней отступкu при отступке в 4 седмиц.<br>
-	 *   следующие 5 элемента - номера добавочных седмиц зимней отступкu при отступке в 5 седмиц.<br>
-	 *   последние 2 элемента - номера добавочных седмиц осенней отступкu.<br>
-	 */
+
 	OrthYear(const std::string& year, std::span<const uint8_t> il, bool osen_otstupka_apostol);
 	OrthYear(const std::string& year, bool o)
 		: OrthYear(year, std::array<uint8_t,17>{33,32,33,31,32,33,30,31,32,33,30,31,17,32,33,10,11}, o) {}

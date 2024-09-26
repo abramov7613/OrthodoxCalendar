@@ -1,29 +1,29 @@
 /*
- * MIT License
- *
- * Copyright (c) 2024 Vladimir Abramov <abramov7613@yandex.ru>
- *
- * Permission is hereby granted, free of charge, to any person
- * obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without
- * restriction, including without limitation the rights to use,
- * copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following
- * conditions:
- *
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
- * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
- */
+		MIT License
+
+		Copyright (c) 2024 Vladimir Abramov <abramov7613@yandex.ru>
+
+		Permission is hereby granted, free of charge, to any person
+		obtaining a copy of this software and associated documentation
+		files (the "Software"), to deal in the Software without
+		restriction, including without limitation the rights to use,
+		copy, modify, merge, publish, distribute, sublicense, and/or sell
+		copies of the Software, and to permit persons to whom the
+		Software is furnished to do so, subject to the following
+		conditions:
+
+		The above copyright notice and this permission notice shall be
+		included in all copies or substantial portions of the Software.
+
+		THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+		EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+		OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+		NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+		HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+		WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+		FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+		OTHER DEALINGS IN THE SOFTWARE.
+*/
 
 #pragma once
 
@@ -35,6 +35,314 @@
 #include <cstdint>
 
 namespace oxc {
+
+/**
+ * Класс для работы с датой. Никак не связан с классом стандартной библиотеки
+ * std::chrono::year_month_day, и отличается тем, что имеет тип года - std::string,
+ * что позволяет производить вычисления в неограниченно широком диапазоне. Реализованы
+ * только методы необходимые для работы с классом ocx::OrthodoxCalendar. Выбрасывает
+ * исключение std::runtime_error в конструкторе, если строка года содержит не числовые
+ * символы.
+ */
+struct year_month_day {
+	std::string year;
+	int8_t month;
+	int8_t day;
+	year_month_day() : year{}, month{}, day{} {}
+	year_month_day(std::string y, int8_t m, int8_t d);
+	year_month_day(unsigned long long y, int8_t m, int8_t d);
+	bool operator==(const year_month_day&) const;
+	bool operator!=(const year_month_day&) const;
+	bool operator<(const year_month_day&) const;
+	bool operator>(const year_month_day&) const;
+};
+
+/**
+ * Класс для работы с церковным календарем. Реализация использует std::string
+ * и библиотеку boost::multiprecision для задания числа года в датах, что дает
+ * возможность работать в неограниченно широком диапазоне, но замедляет работу
+ * при вычислении очень больших дат. Поэтому все вычисления кэшируются внутри
+ * объекта класса. Любой метод принимающий const std::string& для числа года,
+ * бросает исключение если строку невозможно преобразовать в большое целое
+ * (boost::multiprecision::cpp_int) или если число < 2. Для календарных вычислений
+ * в пределах года - каждая дата может иметь набор свойств (признаков), определенных
+ * константами типа uint16_t (полный список см. в разделе группы). Также предусмотрена
+ * возможность установить номера седмиц для расчета отступок / преступок рядовых литургийных
+ * чтений (по умолчанию вычисления производится в соответствии с оф. календарем МП РПЦ);
+ * соответствующие методы сбрасывают внутренний кэш объекта класса.
+ */
+class OrthodoxCalendar {
+	class impl;
+	std::unique_ptr<impl> pimpl;
+public:
+	/**
+ 	* Класс для определения евангельских / апостольских чтений
+ 	*/
+	struct ApostolEvangelieReadings {
+		/**
+ 		* Поле определяет зачало для чтений:\n
+ 		* старшие 4 бита определяют книгу : 1=`апостол`, 2=`от матфея`, 3=`от марка`, 4=`от луки`, 5=`от иоанна`\n
+ 		* младшие 12 бит - определяют номер зачала
+ 		*/
+		uint16_t n{};
+		/**
+ 		* Поле может быть пустым или содержать комментарий зачала.
+ 		*/
+		std::string_view c;
+	};
+	OrthodoxCalendar();
+	OrthodoxCalendar(const OrthodoxCalendar&) = delete;
+	OrthodoxCalendar& operator=(const OrthodoxCalendar&) = delete;
+	OrthodoxCalendar(OrthodoxCalendar&&);
+	OrthodoxCalendar& operator=(OrthodoxCalendar&&);
+	~OrthodoxCalendar();
+	/**
+	 * 	Метод возвращает true для высокосного года
+	 *	\param [in] y число года
+	 *	\param [in] julian выбор метода вычислений по юлианскому или григорианскому календарю
+	 */
+	static bool is_leap_year(const std::string& y, const bool julian=true);
+	/**
+	 * 	Метод возвращает кол-во дней в месяце
+	 *	\param [in] month число месяца (1 - январь, 2 - февраль и т.д.)
+	 *	\param [in] leap признак высокосного года
+	 */
+	static int8_t month_length(const int8_t month, const bool leap);
+	/**
+	 * 	Метод для установки номеров добавочных седмиц зимней отступкu литургийных чтений, при отступке в 1 седмиц.
+	 *	\param [in] w1 номер седмицы. default = 33
+	 *	\return true если установка применена; false в противном случае или если вх. параметр некорректен.
+	 */
+	bool set_winter_indent_weeks_1(const uint8_t w1);
+	/**
+	 * 	Метод для установки номеров добавочных седмиц зимней отступкu литургийных чтений, при отступке в 2 седмиц.
+	 *	\param [in] w1 номер седмицы. default = 32
+	 *	\param [in] w2 номер седмицы. default = 33
+	 *	\return true если установка применена; false в противном случае или если вх. параметр некорректен.
+	 */
+	bool set_winter_indent_weeks_2(const uint8_t w1, const uint8_t w2);
+	/**
+	 * 	Метод для установки номеров добавочных седмиц зимней отступкu литургийных чтений, при отступке в 3 седмиц.
+	 *	\param [in] w1 номер седмицы. default = 31
+	 *	\param [in] w2 номер седмицы. default = 32
+	 *	\param [in] w3 номер седмицы. default = 33
+	 *	\return true если установка применена; false в противном случае или если вх. параметр некорректен.
+	 */
+	bool set_winter_indent_weeks_3(const uint8_t w1, const uint8_t w2, const uint8_t w3);
+	/**
+	 * 	Метод для установки номеров добавочных седмиц зимней отступкu литургийных чтений, при отступке в 4 седмиц.
+	 *	\param [in] w1 номер седмицы. default = 30
+	 *	\param [in] w2 номер седмицы. default = 31
+	 *	\param [in] w3 номер седмицы. default = 32
+	 *	\param [in] w4 номер седмицы. default = 33
+	 *	\return true если установка применена; false в противном случае или если вх. параметр некорректен.
+	 */
+	bool set_winter_indent_weeks_4(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4);
+	/**
+	 * 	Метод для установки номеров добавочных седмиц зимней отступкu литургийных чтений, при отступке в 5 седмиц.
+	 *	\param [in] w1 номер седмицы. default = 30
+	 *	\param [in] w2 номер седмицы. default = 31
+	 *	\param [in] w3 номер седмицы. default = 17
+	 *	\param [in] w4 номер седмицы. default = 32
+	 *	\param [in] w5 номер седмицы. default = 33
+	 *	\return true если установка применена; false в противном случае или если вх. параметр некорректен.
+	 */
+	bool set_winter_indent_weeks_5(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4, const uint8_t w5);
+	/**
+	 * 	Метод для установки номеров добавочных седмиц осенней отступкu литургийных чтений.
+	 *	\param [in] w1 номер седмицы. default = 10
+	 *	\param [in] w2 номер седмицы. default = 11
+	 *	\return true если установка применена; false в противном случае или если вх. параметр некорректен.
+	 */
+	bool set_spring_indent_weeks(const uint8_t w1, const uint8_t w2);
+	/**
+	 * 	Метод установки флага - учитывать ли апостол, при вычислении осенней отступкu литургийных чтений.
+	 *	\param [in] value флаг. default = false
+	 */
+	void set_spring_indent_apostol(const bool value);
+	/**
+	 * 	Метод возвращает настройки вычислении зимней / осенней отступкu литургийных чтений.
+	 *	\return std::pair из вектора и була. вектор содержит 17 элементов:<ul>
+	 *   <li>первый элемент - номер добавочной седмицы зимней отступкu при отступке в 1 седмиц.
+	 *   <li>второй и третий - номера добавочных седмиц зимней отступкu при отступке в 2 седмиц.
+	 *   <li>следующие 3 элемента - номера добавочных седмиц зимней отступкu при отступке в 3 седмиц.
+	 *   <li>следующие 4 элемента - номера добавочных седмиц зимней отступкu при отступке в 4 седмиц.
+	 *   <li>следующие 5 элемента - номера добавочных седмиц зимней отступкu при отступке в 5 седмиц.
+	 *   <li>последние 2 элемента - номера добавочных седмиц осенней отступкu.</ul>
+	 *	Возвращаемый bool это флаг определяющий учитывать ли апостол, при вычислении осенней отступкu литургийных чтений.
+	 */
+	std::pair<std::vector<uint8_t>, bool> get_options() const;
+	/**
+	 * 	Метод вычисляет дату православной пасхи по ст. ст.
+	 *	\param [in] year число года
+	 *	\return дата в формате std::pair, где first - месяц, second - день
+	 */
+	std::pair<int8_t, int8_t> julian_pascha(const std::string& year) const;
+	/**
+	 * 	Метод вычисляет дату православной пасхи
+	 *	\param [in] year число года
+	 *	\param [in] julian выбор метода вычислений по юлианскому или григорианскому календарю
+	 *	\return oxc::year_month_day
+	 */
+	year_month_day pascha(const std::string& year, const bool julian=true) const;
+	/**
+	 * 	Метод вычисляет JDN (Julian Day Number) для указанной даты.
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 */
+	std::string jdn_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	/**
+	 * 	Метод переводит дату григорианского календаря в дату юлианского календаря
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\return oxc::year_month_day
+	 */
+	year_month_day grigorian_to_julian(const std::string& y, const int8_t m, const int8_t d) const;
+	/**
+	 * 	Метод переводит дату юлианского календаря в дату григорианского календаря
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\return oxc::year_month_day
+	 */
+	year_month_day julian_to_grigorian(const std::string& y, const int8_t m, const int8_t d) const;
+	/**
+	 * 	Метод вычисляет кол-во седмиц зимней отступкu литургийных чтений (значения от -5 до 0)
+	 *	\param [in] year число года
+	 */
+	int8_t winter_indent(const std::string& year) const;
+	/**
+	 * 	Метод вычисляет кол-во седмиц осенней отступкu \ преступки литургийных чтений (значения от -2 до 3)
+	 *	\param [in] year число года
+	 */
+	int8_t spring_indent(const std::string& year) const;
+	/**
+	 * 	Метод вычисляет длительность петрова поста в днях.
+	 *	\param [in] year число года
+	 */
+	int8_t apostol_post_length(const std::string& year) const;
+	/**
+	 * 	Метод вычисляет глас для указанной даты
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 *	\return значения от 1 до 8. для периода от суб.лазаревой до недели всех святых: значение < 1
+	 */
+	int8_t date_glas(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	/**
+	 * 	Метод вычисляет календарный номер по пятидесятнице для указанной даты
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 *	\return для воскр = номер недели. для остальных дней = номер седмицы. для периода от начала вел.поста до тр.род.субботы = -1
+	 */
+	int8_t date_n50(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	/**
+	 * 	Метод вычисляет день недели для указанной даты
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 *	\return 0-вс, 1-пн, 2-вт, 3-ср, 4-чт, 5-пт, 6-сб.
+	 */
+	int8_t weekday_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	/**
+	 * 	Метод вычисляет свойства указанной даты
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 *	\return массив констант из пространства oxc:: (полный список см. в разделе группы)
+	 */
+	std::optional<std::vector<uint16_t>> date_properties(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	/**
+	 * 	Метод вычисляет рядовые литургийные чтения Апостола указанной даты. Праздники не учитываются.
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 *	\return oxc::OrthodoxCalendar::ApostolEvangelieReadings или std::nullopt
+	 */
+	std::optional<ApostolEvangelieReadings> date_apostol(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	/**
+	 * 	Метод вычисляет рядовые литургийные чтения Евангелия указанной даты. Праздники не учитываются.
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 *	\return oxc::OrthodoxCalendar::ApostolEvangelieReadings или std::nullopt
+	 */
+	std::optional<ApostolEvangelieReadings> date_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	/**
+	 * 	Метод вычисляет воскресные Евангелия утрени для указанной даты.
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 *	\return oxc::OrthodoxCalendar::ApostolEvangelieReadings или std::nullopt
+	 */
+	std::optional<ApostolEvangelieReadings> resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	/**
+	 * 	Метод возвращает первую найденную дату в указанном году, соответствующую второму параметру
+	 *	\param [in] year число года
+	 *	\param [in] property любая константа из пространства oxc:: (полный список см. в разделе группы)
+	 *	\param [in] julian выбор возвращаемой даты по юлианскому или григорианскому календарю
+	 *	\return oxc::year_month_day или std::nullopt если дата не найдена
+	 */
+	std::optional<year_month_day> get_date_with(const std::string& year, const uint16_t property, const bool julian=true) const;
+	/**
+	 * 	Метод возвращает все даты в указанном году, соответствующие второму параметру
+	 *	\param [in] year число года
+	 *	\param [in] property любая константа из пространства oxc:: (полный список см. в разделе группы)
+	 *	\param [in] julian выбор возвращаемой даты по юлианскому или григорианскому календарю
+	 *	\return массив объектов oxc::year_month_day или std::nullopt если ни одна дата не найдена
+	 */
+	std::optional<std::vector<year_month_day>> get_alldates_with(const std::string& year, const uint16_t property, const bool julian=true) const;
+	/**
+	 * 	Метод возвращает первую найденную дату в указанном году, соответствующую любому элементу второго параметра
+	 *	\param [in] year число года
+	 *	\param [in] properties массив констант из пространства oxc:: (полный список см. в разделе группы)
+	 *	\param [in] julian выбор возвращаемой даты по юлианскому или григорианскому календарю
+	 *	\return oxc::year_month_day или std::nullopt если дата не найдена
+	 */
+	std::optional<year_month_day> get_date_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
+	/**
+	 * 	Метод возвращает первую найденную дату в указанном году, соответствующую всем элементам второго параметра
+	 *	\param [in] year число года
+	 *	\param [in] properties массив констант из пространства oxc:: (полный список см. в разделе группы)
+	 *	\param [in] julian выбор возвращаемой даты по юлианскому или григорианскому календарю
+	 *	\return oxc::year_month_day или std::nullopt если дата не найдена
+	 */
+	std::optional<year_month_day> get_date_withallof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
+	/**
+	 * 	Метод возвращает все даты в указанном году, соответствующие любому элементу второго параметра
+	 *	\param [in] year число года
+	 *	\param [in] properties массив констант из пространства oxc:: (полный список см. в разделе группы)
+	 *	\param [in] julian выбор возвращаемой даты по юлианскому или григорианскому календарю
+	 *	\return массив объектов oxc::year_month_day или std::nullopt если ни одна дата не найдена
+	 */
+	std::optional<std::vector<year_month_day>> get_alldates_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
+	/**
+	 * 	Метод возвращает текстовое описание даты.
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 */
+	std::string get_description_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	/**
+	 * 	Метод возвращает текстовое описание нескольких дат.
+	 *	\param [in] days массив дат
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 *	\param [in] separator строка-разделитель для результата
+	 */
+	std::string get_description_for_dates(std::span<const year_month_day> days, const bool julian=true, const std::string separator="\n") const;
+};
 
 /**
  * \defgroup block1 группа констант 1 - переходящие дни года
@@ -336,67 +644,5 @@ const uint16_t full7_sirn       = 4007;///< Сплошная седмица. С�
 const uint16_t full7_pasha      = 4008;///< Сплошная седмица. Светлая
 const uint16_t full7_troica     = 4009;///< Сплошная седмица. Троицкая
 /** @} */
-
-struct year_month_day {
-	std::string year;
-	int8_t month;
-	int8_t day;
-	year_month_day() : year{}, month{}, day{} {}
-	year_month_day(std::string y, int8_t m, int8_t d);
-	year_month_day(unsigned long long y, int8_t m, int8_t d);
-	bool operator==(const year_month_day&) const;
-	bool operator!=(const year_month_day&) const;
-	bool operator<(const year_month_day&) const;
-	bool operator>(const year_month_day&) const;
-};
-
-class OrthodoxCalendar {
-	class impl;
-	std::unique_ptr<impl> pimpl;
-public:
-	//структура для определения евангельских / апостольских чтений
-	struct ApostolEvangelieReadings {
-		uint16_t n{};		     ///< старшие 4 бита определяют книгу : 1=`апостол`, 2=`от матфея`, 3=`от марка`, 4=`от луки`, 5=`от иоанна`. младшие 12 бит - номер зачала.
-		std::string_view c;  ///< комментарий зачала
-	};
-	OrthodoxCalendar();
-	OrthodoxCalendar(const OrthodoxCalendar&) = delete;
-	OrthodoxCalendar& operator=(const OrthodoxCalendar&) = delete;
-	OrthodoxCalendar(OrthodoxCalendar&&);
-	OrthodoxCalendar& operator=(OrthodoxCalendar&&);
-	~OrthodoxCalendar();
-	static bool is_leap_year(const std::string& y, const bool julian=true);
-	static int8_t month_length(const int8_t month, const bool leap);
-	bool set_winter_indent_weeks_1(const uint8_t w1);
-	bool set_winter_indent_weeks_2(const uint8_t w1, const uint8_t w2);
-	bool set_winter_indent_weeks_3(const uint8_t w1, const uint8_t w2, const uint8_t w3);
-	bool set_winter_indent_weeks_4(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4);
-	bool set_winter_indent_weeks_5(const uint8_t w1, const uint8_t w2, const uint8_t w3, const uint8_t w4, const uint8_t w5);
-	bool set_spring_indent_weeks(const uint8_t w1, const uint8_t w2);
-	void set_spring_indent_apostol(const bool value);
-	std::pair<std::vector<uint8_t>, bool> get_options() const;
-	std::pair<int8_t, int8_t> julian_pascha(const std::string& year) const;
-	year_month_day pascha(const std::string& year, const bool julian=true) const;
-	std::string jdn_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
-	year_month_day grigorian_to_julian(const std::string& y, const int8_t m, const int8_t d) const;
-	year_month_day julian_to_grigorian(const std::string& y, const int8_t m, const int8_t d) const;
-	int8_t winter_indent(const std::string& year) const;
-	int8_t spring_indent(const std::string& year) const;
-	int8_t apostol_post_length(const std::string& year) const;
-	int8_t date_glas(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
-	int8_t date_n50(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
-	int8_t weekday_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
-	std::optional<std::vector<uint16_t>> date_properties(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
-	std::optional<ApostolEvangelieReadings> date_apostol(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
-	std::optional<ApostolEvangelieReadings> date_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
-	std::optional<ApostolEvangelieReadings> resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
-	std::optional<year_month_day> get_date_with(const std::string& year, const uint16_t property, const bool julian=true) const;
-	std::optional<std::vector<year_month_day>> get_alldates_with(const std::string& year, const uint16_t property, const bool julian=true) const;
-	std::optional<year_month_day> get_date_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
-	std::optional<year_month_day> get_date_withallof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
-	std::optional<std::vector<year_month_day>> get_alldates_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
-	std::string get_description_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
-	std::string get_description_for_dates(std::span<const year_month_day> days, const bool julian=true, const std::string separator="\n") const;
-};
 
 }// namespace oxc
