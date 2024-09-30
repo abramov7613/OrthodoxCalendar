@@ -61,6 +61,38 @@ catch(const std::exception& e)
 	throw	std::runtime_error("ошибка преобразования строки \""+i+"\" в cpp_int.");
 }
 
+std::string get_date_str (int8_t m, int8_t d)
+{
+	std::string s{};
+	switch(m) {
+		case 1: { s = "января"; }
+		break;
+		case 2: { s = "февраля"; }
+		break;
+		case 3: { s = "марта"; }
+		break;
+		case 4: { s = "апреля"; }
+		break;
+		case 5: { s = "мая"; }
+		break;
+		case 6: { s = "июня"; }
+		break;
+		case 7: { s = "июля"; }
+		break;
+		case 8: { s = "августа"; }
+		break;
+		case 9: { s = "сентября"; }
+		break;
+		case 10:{ s = "октября"; }
+		break;
+		case 11:{ s = "ноября"; }
+		break;
+		case 12:{ s = "декабря"; }
+		break;
+		default: return {};
+	};
+	return std::string{std::to_string(d)+' '+s+' '};
+}
 /*----------------------------------------------*/
 /*              class year_month_day            */
 /*----------------------------------------------*/
@@ -236,6 +268,7 @@ class OrthYear {
 	std::vector<Data2> data2;//sorted array
 	int8_t winter_indent;
 	int8_t spring_indent;
+	big_int y;
 
 	std::optional<decltype(data1)::const_iterator> find_in_data1(int8_t m, int8_t d) const
 	{
@@ -273,7 +306,7 @@ public:
 
 OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool osen_otstupka_apostol)
 { //main constructor
-	big_int y { string_to_big_int(year) };
+	y = string_to_big_int(year) ;
 	if( y < 2 )
 		throw std::runtime_error("выход числа года '"+y.str()+"' за границу диапазона");
 	bool bad_il{};
@@ -2959,37 +2992,6 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
 		{ned_pod16iulya,          "Память святых отцов шести Вселенских Соборов."},
 		{ned_pered18avg,          "Собор Кемеровских святых."}
 	};
-	auto get_date_str = [](int m, int d)->std::string {
-		std::string s{};
-		switch(m) {
-			case 1: { s = "января"; }
-			break;
-			case 2: { s = "февраля"; }
-			break;
-			case 3: { s = "марта"; }
-			break;
-			case 4: { s = "апреля"; }
-			break;
-			case 5: { s = "мая"; }
-			break;
-			case 6: { s = "июня"; }
-			break;
-			case 7: { s = "июля"; }
-			break;
-			case 8: { s = "августа"; }
-			break;
-			case 9: { s = "сентября"; }
-			break;
-			case 10:{ s = "октября"; }
-			break;
-			case 11:{ s = "ноября"; }
-			break;
-			case 12:{ s = "декабря"; }
-			break;
-			default: return std::string{};
-		};
-		return std::string{std::to_string(d)+' '+s+'.'+' '};
-	};
 	auto get_dn_str = [](int8_t d) -> std::string {
 		std::string s{};
 		switch(d) {
@@ -3025,7 +3027,8 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
 	std::string res, gl, po50;
 	if(fr.value()->glas > 0) gl = "глас " + std::to_string(fr.value()->glas) + ". ";
 	if(fr.value()->n50 > 0) po50 = std::to_string(fr.value()->n50) + " по Пятидесятнице. ";
-	res = get_date_str(month, day) + get_dn_str(fr.value()->dn) + po50 + gl + get_markers_str(fr.value()->day_markers);
+	res = get_date_str(month, day) + y.str() + " г по ст. ст. "
+				+ get_dn_str(fr.value()->dn) + po50 + gl + get_markers_str(fr.value()->day_markers);
 	return res;
 }
 
@@ -3479,11 +3482,21 @@ std::optional<std::vector<year_month_day>> OrthodoxCalendar::impl::get_alldates_
 
 std::string OrthodoxCalendar::impl::get_description_for_date(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
-	year_month_day ymd {y, m, d};
-	if(!julian) ymd = grigorian_to_julian(y, m, d);
-	std::string& year = ymd.year;
-	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
-		return p->get_description_forday(ymd.month, ymd.day);
+	year_month_day gr_ymd, ju_ymd;
+	if(julian) {
+		ju_ymd.year = y;
+		ju_ymd.month = m;
+		ju_ymd.day = d;
+		gr_ymd = julian_to_grigorian(y, m, d);
+	} else {
+		gr_ymd.year = y;
+		gr_ymd.month = m;
+		gr_ymd.day = d;
+		ju_ymd = grigorian_to_julian(y, m, d);
+	}
+	if(auto p=orthyear_cache.get_or_make(ju_ymd.year, ju_ymd.year, get_options().first, osen_otstupka_apostol); p) {
+		std::string prefix = get_date_str(gr_ymd.month, gr_ymd.day) + gr_ymd.year + " г. - " ;
+		return prefix + p->get_description_forday(ju_ymd.month, ju_ymd.day);
 	}
 	return {};
 }
