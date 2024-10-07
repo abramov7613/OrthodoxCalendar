@@ -3024,11 +3024,17 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
 	};
 	auto fr = find_in_data1(month, day);
 	if(!fr) return {};
-	std::string res, gl, po50;
+	std::string res, gl, po50, post;
 	if(fr.value()->glas > 0) gl = "глас " + std::to_string(fr.value()->glas) + ". ";
 	if(fr.value()->n50 > 0) po50 = std::to_string(fr.value()->n50) + " по Пятидесятнице. ";
+	if(std::any_of(fr.value()->day_markers.begin(), fr.value()->day_markers.end(),
+										[](auto i){ return i==oxc::post_petr; })) post = "Петров пост. ";
+	if(std::any_of(fr.value()->day_markers.begin(), fr.value()->day_markers.end(),
+										[](auto i){ return i==oxc::post_usp; })) post = "Успенский пост. ";
+	if(std::any_of(fr.value()->day_markers.begin(), fr.value()->day_markers.end(),
+									[](auto i){ return i==oxc::post_rojd; })) post = "Рождественский пост. ";
 	res = get_date_str(month, day) + y.str() + " г по ст. ст. "
-				+ get_dn_str(fr.value()->dn) + po50 + gl + get_markers_str(fr.value()->day_markers);
+				+ get_dn_str(fr.value()->dn) + po50 + gl + get_markers_str(fr.value()->day_markers) + post;
 	return res;
 }
 
