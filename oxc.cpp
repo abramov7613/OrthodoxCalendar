@@ -3128,6 +3128,7 @@ public:
 	std::optional<ApEvReads> date_apostol(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
 	std::optional<ApEvReads> date_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
 	std::optional<ApEvReads> resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
+	bool is_date_of(const std::string& y, const int8_t m, const int8_t d, const uint16_t property, const bool julian=true) const;
 	std::optional<year_month_day> get_date_with(const std::string& year, const uint16_t property, const bool julian=true) const;
 	std::optional<std::vector<year_month_day>> get_alldates_with(const std::string& year, const uint16_t property, const bool julian=true) const;
 	std::optional<year_month_day> get_date_withanyof(const std::string& year, std::span<const uint16_t> properties, const bool julian=true) const;
@@ -3411,6 +3412,14 @@ std::optional<ApEvReads> OrthodoxCalendar::impl::resurrect_evangelie(const std::
 	return get_date_reads(y, m, d, julian, &OrthYear::get_resurrect_evangelie);
 }
 
+bool OrthodoxCalendar::impl::is_date_of(const std::string& y, const int8_t m, const int8_t d, const uint16_t property, const bool julian) const
+{
+	if(auto x = date_properties(y, m, d, julian); x) {
+		return std::any_of( x->begin(), x->end(), [property](auto i){ return i==property; } );
+	}
+	return false;
+}
+
 std::optional<year_month_day> OrthodoxCalendar::impl::get_date_with(const std::string& year, const uint16_t property, const bool julian) const
 {
 	if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
@@ -3683,6 +3692,11 @@ std::optional<ApEvReads> OrthodoxCalendar::date_evangelie(const std::string& y, 
 std::optional<ApEvReads> OrthodoxCalendar::resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian) const
 {
 	return pimpl->resurrect_evangelie(y, m, d, julian);
+}
+
+bool OrthodoxCalendar::is_date_of(const std::string& y, const int8_t m, const int8_t d, const uint16_t property, const bool julian) const
+{
+	return pimpl->is_date_of(y, m, d, property, julian);
 }
 
 std::optional<year_month_day> OrthodoxCalendar::get_date_with(const std::string& year, const uint16_t property, const bool julian) const

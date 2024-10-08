@@ -291,6 +291,15 @@ public:
 	 */
 	std::optional<ApostolEvangelieReadings> resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const bool julian=true) const;
 	/**
+	 *	Метод проверяет соответствует ли указанная дата признаку property
+	 *	\param [in] y число года
+	 *	\param [in] m число месяца
+	 *	\param [in] d число дня
+	 *	\param [in] property любая константа из пространства oxc:: (полный список см. в разделе группы)
+	 *	\param [in] julian флаг определяет указанную дату по юлианскому или григорианскому календарю
+	 */
+	bool is_date_of(const std::string& y, const int8_t m, const int8_t d, const uint16_t property, const bool julian=true) const;
+	/**
 	 * 	Метод возвращает первую найденную дату в указанном году, соответствующую второму параметру
 	 *	\param [in] year число года
 	 *	\param [in] property любая константа из пространства oxc:: (полный список см. в разделе группы)
