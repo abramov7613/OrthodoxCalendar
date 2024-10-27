@@ -2590,27 +2590,27 @@ ApEvReads OrthYear::get_resurrect_evangelie(int8_t month, int8_t day) const
 	if(dn != 0) return {};
 	//таблица 11-и воскресныx утрених евангелий
 	static const std::array resurrect_evangelie_table = {
-		ApEvReads{ 2116, "Мф., 116 зач., XXVIII, 16–20." },
-		ApEvReads{ 370 , "Мк., 70 зач., XVI, 1–8." },
-		ApEvReads{ 371 , "Мк., 71 зач., XVI, 9–20." },
-		ApEvReads{ 4112, "Лк., 112 зач., XXIV, 1–12." },
-		ApEvReads{ 4113, "Лк., 113 зач., XXIV, 12–35." },
-		ApEvReads{ 4114, "Лк., 114 зач., XXIV, 36–53." },
-		ApEvReads{ 563 , "Ин., 63 зач., XX, 1–10." },
-		ApEvReads{ 564 , "Ин., 64 зач., XX, 11–18." },
-		ApEvReads{ 565 , "Ин., 65 зач., XX, 19–31." },
-		ApEvReads{ 566 , "Ин., 66 зач., XXI, 1–14." },
-		ApEvReads{ 567 , "Ин., 67 зач., XXI, 15–25." }
+		ApEvReads{ 0X742,  "Мф., 116 зач., XXVIII, 16–20." },
+		ApEvReads{ 0X463 , "Мк., 70 зач., XVI, 1–8." },
+		ApEvReads{ 0X473 , "Мк., 71 зач., XVI, 9–20." },
+		ApEvReads{ 0X704,  "Лк., 112 зач., XXIV, 1–12." },
+		ApEvReads{ 0X714,  "Лк., 113 зач., XXIV, 12–35." },
+		ApEvReads{ 0X724,  "Лк., 114 зач., XXIV, 36–53." },
+		ApEvReads{ 0X3f5 , "Ин., 63 зач., XX, 1–10." },
+		ApEvReads{ 0X405 , "Ин., 64 зач., XX, 11–18." },
+		ApEvReads{ 0X415 , "Ин., 65 зач., XX, 19–31." },
+		ApEvReads{ 0X425 , "Ин., 66 зач., XXI, 1–14." },
+		ApEvReads{ 0X435 , "Ин., 67 зач., XXI, 15–25." }
 	};
 	//таблица праздничных утрених евангелий
 	static const std::array holydays_evangelie_table = {
-		ApEvReads{  283, "Мф., 83 зач., XXI, 1–11, 15–17." },//Вербное воскресенье
-		ApEvReads{   32, "Мк., 2 зач., I, 9–11." },          //Крещение
-		ApEvReads{   48, "Лк., 8 зач., II, 25–32."},         //Сре́тение
-		ApEvReads{   44, "Лк., 4 зач., I, 39–49, 56."},      //Благовещ́ение, Успе́ние, Рождество, Введе́ние Пресв.Богородицы
-		ApEvReads{  445, "Лк., 45 зач., IX, 28–36."},        //Преображение
-		ApEvReads{  542, "Ин., 42 зач., XII, 28-36."},       //Воздви́жение
-		ApEvReads{   22, "Мф., 2 зач., I, 18–25."}           //Рождество
+		ApEvReads{ 0X532, "Мф., 83 зач., XXI, 1–11, 15–17." },//Вербное воскресенье
+		ApEvReads{ 0X23,  "Мк., 2 зач., I, 9–11." },          //Крещение
+		ApEvReads{ 0X84,  "Лк., 8 зач., II, 25–32."},         //Сре́тение
+		ApEvReads{ 0X44,  "Лк., 4 зач., I, 39–49, 56."},      //Благовещ́ение, Успе́ние, Рождество, Введе́ние Пресв.Богородицы
+		ApEvReads{ 0X2d4, "Лк., 45 зач., IX, 28–36."},        //Преображение
+		ApEvReads{ 0X2a5, "Ин., 42 зач., XII, 28-36."},       //Воздви́жение
+		ApEvReads{ 0X22,  "Мф., 2 зач., I, 18–25."}           //Рождество
 	};
 	static const std::array unique_evangelie_table = {
 		ned2_popashe,

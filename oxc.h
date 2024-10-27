@@ -177,13 +177,13 @@ public:
 	std::pair<std::vector<uint8_t>, bool> get_options() const;
 	/**
 	 * 	Метод вычисляет дату православной пасхи по ст. ст.
-	 *	\param [in] year число года
+	 *	\param [in] year число года по юлианскому календарю
 	 *	\return дата в формате std::pair, где first - месяц, second - день
 	 */
 	std::pair<int8_t, int8_t> julian_pascha(const std::string& year) const;
 	/**
 	 * 	Метод вычисляет дату православной пасхи
-	 *	\param [in] year число года
+	 *	\param [in] year число года по юлианскому календарю
 	 *	\param [in] julian флаг определяет возвращаемую дату по юлианскому или григорианскому календарю
 	 *	\return oxc::year_month_day
 	 */
