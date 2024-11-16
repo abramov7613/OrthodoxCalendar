@@ -26,15 +26,28 @@
 */
 
 #include "oxc.h"
-#include <map>
-#include <set>
-#include <array>
-#include <queue>
-#include <algorithm>
-#include <unordered_map>
-#include <stdexcept>
-#include <limits>
-#include <boost/multiprecision/cpp_int.hpp>
+#include <bits/std_abs.h>                                  // for abs
+#include <algorithm>                                       // for copy, tran...
+#include <array>                                           // for array, arr...
+#include <boost/cstdint.hpp>                               // for int8_t
+#include <boost/multiprecision/cpp_int.hpp>                // for cpp_int_ba...
+#include <compare>                                         // for common_com...
+#include <cstdlib>                                         // for abs, size_t
+#include <exception>                                       // for exception
+#include <initializer_list>                                // for initialize...
+#include <iterator>                                        // for back_inser...
+#include <limits>                                          // for numeric_li...
+#include <map>                                             // for operator==
+#include <queue>                                           // for queue
+#include <set>                                             // for set
+#include <stdexcept>                                       // for runtime_error
+#include <type_traits>                                     // for enable_if<...
+#include <unordered_map>                                   // for operator==
+// uncomment next line to disable assert()
+//#define NDEBUG
+#include <cassert>
+
+#define M_COUNT 8
 
 namespace oxc {
 
@@ -225,7 +238,7 @@ class OrthYear {
 		int8_t month{};
 		ApEvReads apostol;
 		ApEvReads evangelie;
-		std::array<uint16_t, 8> day_markers{};
+		std::array<uint16_t, M_COUNT> day_markers{};
 		bool operator<(const Data1& rhs) const
 		{
 			return ShortDate{month, day} < ShortDate{rhs.month, rhs.day};
@@ -1339,19 +1352,47 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	};
 	//функц.установка признака для даты
 	auto add_marker_for_date_ = [&days, &markers](const ShortDate& d, const uint16_t m){
+		#ifdef NDEBUG
 		if(auto fr = days.find(d); fr!=days.end()) {
 			fr->second.day_markers.insert(m);
 			markers.insert({m, d});
 		}
+		#else
+		if(auto fr = days.find(d); fr!=days.end()) {
+			auto [it, ok] = fr->second.day_markers.insert(m);
+			assert((void("days container insertion failed"), ok));
+			assert((void("markers container insertion failed"),
+							std::none_of(markers.begin(), markers.end(), [d,m](const auto& e){ return m==e.first && d==e.second; })));
+			markers.insert({m, d});
+			assert(fr->second.day_markers.size() <= M_COUNT);
+		} else {
+			assert((void("element not found"), false));
+		}
+		#endif
 	};
 	//функц.установка нескольких признакoB для даты
 	auto add_markers_for_date_ = [&days, &markers](const ShortDate& d, std::initializer_list<uint16_t> l){
+		#ifdef NDEBUG
 		if(auto fr = days.find(d); fr!=days.end()) {
 			for(auto i: l) {
 				fr->second.day_markers.insert(i);
 				markers.insert({i, d});
 			}
 		}
+		#else
+		if(auto fr = days.find(d); fr!=days.end()) {
+			for(auto i: l) {
+				auto [it, ok] = fr->second.day_markers.insert(i);
+				assert((void("days container insertion failed"), ok));
+				assert((void("markers container insertion failed"),
+								std::none_of(markers.begin(), markers.end(), [d,i](const auto& e){ return i==e.first && d==e.second; })));
+				markers.insert({i, d});
+				assert(fr->second.day_markers.size() <= M_COUNT);
+			}
+		} else {
+			assert((void("element not found"), false));
+		}
+		#endif
 	};
 	//функц.поиск дня недели
 	auto get_dn_ = [&days](const ShortDate& d)->int8_t{
@@ -1382,25 +1423,25 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	auto set_glas_ = [&days](const ShortDate& d, const int8_t glas){
 		if(auto fr = days.find(d); fr!=days.end()) {
 			fr->second.glas = glas;
-		}
+		} else { assert((void("element not found"), false)); }
 	};
 	//функц.установка евангелия для даты
 	auto set_evangelie_ = [&days](const ShortDate& d, const ApEvReads& ev){
 		if(auto fr = days.find(d); fr!=days.end()) {
 			fr->second.evangelie = ev;
-		}
+		} else { assert((void("element not found"), false)); }
 	};
 	//функц.установка апостола для даты
 	auto set_apostol_ = [&days](const ShortDate& d, const ApEvReads& ap){
 		if(auto fr = days.find(d); fr!=days.end()) {
 			fr->second.apostol = ap;
-		}
+		} else { assert((void("element not found"), false)); }
 	};
 	//функц.установка номер по пятидесятнице для даты
 	auto set_n50_ = [&days](const ShortDate& d, const int8_t n){
 		if(auto fr = days.find(d); fr!=days.end()) {
 			fr->second.n50 = n;
-		}
+		} else { assert((void("element not found"), false)); }
 	};
 	//функц.поиск номер по пятидесятнице для даты
 	auto get_n50_ = [&days](const ShortDate& d)->int8_t{
@@ -1432,7 +1473,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {svetlaya1, full7_pasha});
 	dd = increment_date_(dd, 1, b);
-	add_markers_for_date_(dd, {svetlaya2, full7_pasha});
+	add_markers_for_date_(dd, {svetlaya2, full7_pasha, prep_dav_gar, hristodul});
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {svetlaya3, full7_pasha});
 	dd = increment_date_(dd, 1, b);
@@ -1456,7 +1497,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	dd = increment_date_(dd, 1, b);
 	add_marker_for_date_(dd, s2popashe_6);
 	dd = increment_date_(dd, 1, b);
-	add_marker_for_date_(dd, ned3_popashe);
+	add_markers_for_date_(dd, {ned3_popashe, iosif_arimaf, tamar_gruz});
 	dd = increment_date_(dd, 1, b);
 	add_marker_for_date_(dd, s3popashe_1);
 	dd = increment_date_(dd, 1, b);
@@ -1470,7 +1511,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	dd = increment_date_(dd, 1, b);
 	add_marker_for_date_(dd, s3popashe_6);
 	dd = increment_date_(dd, 1, b);
-	add_marker_for_date_(dd, ned4_popashe);
+	add_markers_for_date_(dd, {ned4_popashe, tavif, pm_avraam_bolg});
 	dd = increment_date_(dd, 1, b);
 	add_marker_for_date_(dd, s4popashe_1);
 	dd = increment_date_(dd, 1, b);
@@ -1506,7 +1547,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	dd = increment_date_(dd, 1, b);
 	add_marker_for_date_(dd, s6popashe_3);
 	dd = increment_date_(dd, 1, b);
-	add_marker_for_date_(dd, s6popashe_4);
+	add_markers_for_date_(dd, {s6popashe_4, much_fereidan});
 	dd = increment_date_(dd, 1, b);
 	add_marker_for_date_(dd, s6popashe_5);
 	dd = increment_date_(dd, 1, b);
@@ -1518,9 +1559,9 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	dd = increment_date_(dd, 1, b);
 	add_marker_for_date_(dd, s7popashe_2);
 	dd = increment_date_(dd, 1, b);
-	add_marker_for_date_(dd, s7popashe_3);
+	add_markers_for_date_(dd, {s7popashe_3, dodo_gar});
 	dd = increment_date_(dd, 1, b);
-	add_marker_for_date_(dd, s7popashe_4);
+	add_markers_for_date_(dd, {s7popashe_4, david_gar});
 	dd = increment_date_(dd, 1, b);
 	add_marker_for_date_(dd, s7popashe_5);
 	dd = increment_date_(dd, 1, b);
@@ -1546,10 +1587,10 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	}
 	//1-я пятница Петрова поста - Прп. Варлаама Хутынского
 	dd = increment_date_(dd, 5, b);
-	add_marker_for_date_(dd, pyatnica9_popashe);
+	add_marker_for_date_(dd, varlaam_hut);
 	//всех святых, в земле Русской просиявших
 	dd = increment_date_(dd, 2, b);
-	add_marker_for_date_(dd, ned2_po50);
+	add_markers_for_date_(dd, {ned2_po50, prep_otec_afon});
 	//всех мучеников по взятии Царяграда пострадавших
 	dd = increment_date_(dd, 7, b);
 	add_marker_for_date_(dd, ned3_po50);
@@ -1571,7 +1612,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	do {
 		i = get_dn_(dd);
 		if(i==0) {
-			add_marker_for_date_(dd, ned_pered6sent);
+			add_marker_for_date_(dd, petr_fevron_murom);
 			break;
 		}
 		dd = decrement_date_(dd, 1, b);
@@ -1789,7 +1830,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	t2 = dd;
 	add_markers_for_date_(dd, {sirnaya3, full7_sirn});
 	dd = increment_date_(dd, 1, b);
-	add_markers_for_date_(dd, {sirnaya4, full7_sirn});
+	add_markers_for_date_(dd, {sirnaya4, full7_sirn, shio_mg});
 	dd = increment_date_(dd, 1, b);
 	t3 = dd;
 	add_markers_for_date_(dd, {sirnaya5, full7_sirn});
@@ -1809,7 +1850,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {vel_post_d5n1, post_vel});
 	dd = increment_date_(dd, 1, b);
-	add_markers_for_date_(dd, {vel_post_d6n1, post_vel});
+	add_markers_for_date_(dd, {vel_post_d6n1, post_vel, feodor_tir});
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {vel_post_d0n2, post_vel});
 	dd = increment_date_(dd, 1, b);
@@ -1825,7 +1866,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {vel_post_d6n2, post_vel});
 	dd = increment_date_(dd, 1, b);
-	add_markers_for_date_(dd, {vel_post_d0n3, post_vel});
+	add_markers_for_date_(dd, {vel_post_d0n3, post_vel, grigor_palam});
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {vel_post_d1n3, post_vel});
 	dd = increment_date_(dd, 1, b);
@@ -1853,7 +1894,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {vel_post_d6n4, post_vel});
 	dd = increment_date_(dd, 1, b);
-	add_markers_for_date_(dd, {vel_post_d0n5, post_vel});
+	add_markers_for_date_(dd, {vel_post_d0n5, post_vel, ioann_lestv});
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {vel_post_d1n5, post_vel});
 	dd = increment_date_(dd, 1, b);
@@ -1867,7 +1908,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {vel_post_d6n5, post_vel});
 	dd = increment_date_(dd, 1, b);
-	add_markers_for_date_(dd, {vel_post_d0n6, post_vel});
+	add_markers_for_date_(dd, {vel_post_d0n6, post_vel, mari_egipt});
 	dd = increment_date_(dd, 1, b);
 	add_markers_for_date_(dd, {vel_post_d1n6, post_vel});
 	dd = increment_date_(dd, 1, b);
@@ -1937,7 +1978,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	do {
 		i = get_dn_(dd);
 		if(i==6) {
-			add_marker_for_date_(dd, sub_pobogoyav);
+			add_markers_for_date_(dd, {sub_pobogoyav, pahomii_kensk});
 			break;
 		}
 		dd = increment_date_(dd, 1, b);
@@ -2133,12 +2174,24 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	if(check_date_(dd, s1po50_1)) dd = make_pair(5, 26);
 	if(check_date_(dd, ned8_popashe)) dd = make_pair(5, 22);
 	add_marker_for_date_(dd, obret_gl_ioanna3);
-	//Собор Тверских святых
+	//Прмчч Липсийских(переходящее празднование в 1-е воскресенье после 27 июня).
+	dd = make_pair(6, 28);
+	do {
+		i = get_dn_(dd);
+		if(i==0) {
+			add_marker_for_date_(dd, much_lipsiisk);
+			break;
+		}
+		dd = increment_date_(dd, 1, b);
+	} while (true);
+	//Собор Тверских святых;
+	//Свт.Арсения, еп. Тверского
+	//Прпп. Тихона, Василия и Никона Соколовских(XVI) (переходящее празднование в 1-е воскресенье после 29 июня).
 	dd = make_pair(6, 30);
 	do {
 		i = get_dn_(dd);
 		if(i==0) {
-			add_marker_for_date_(dd, ned_popetraipavla);
+			add_markers_for_date_(dd, {sobor_tversk, prep_sokolovsk, arsen_tversk});
 			break;
 		}
 		dd = increment_date_(dd, 1, b);
@@ -2184,7 +2237,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 	do {
 		i = get_dn_(dd);
 		if(i==0) {
-			add_marker_for_date_(dd, ned_pered18avg);
+			add_marker_for_date_(dd, sobor_kemero);
 			break;
 		}
 		dd = decrement_date_(dd, 1, b);
@@ -2808,12 +2861,12 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
 		{s1po50_5,           "Пятница Пятидесятницы."},
 		{s1po50_6,           "Суббота Пятидесятницы. Отдание праздника Пятидесятницы."},
 		{ned1_po50,          "Неделя 1-я по Пятидесятнице, Всех святых."},
-		{pyatnica9_popashe,  "Прп. Варлаа́ма Ху́тынского. Табы́нской иконы Божией Матери."},
+		{varlaam_hut,        "Прп. Варлаа́ма Ху́тынского. Табы́нской иконы Божией Матери."},
 		{ned2_po50,          "Неделя 2-я по Пятидесятнице, Всех святых, в земле Русской просиявших."},
 		{ned3_po50,          "Неделя 3-я по Пятидесятнице. Собор всех новоявле́нных мучеников Христовых по взятии Царяграда пострадавших. Собор Новгородских святых. Собор Белорусских святых. Собор святых Санкт-Петербургской митрополии."},
 		{ned4_po50,          "Неделя 4-я по Пятидесятнице. Собор преподобных отцов Псково-Печерских."},
 		{ned_popreobrajenii, "Собо́р преподо́бных отце́в, на Валаа́ме просия́вших."},
-		{ned_pered6sent,     "Перенесение мощей блгвв. кн. Петра, в иночестве Давида, и кн. Февронии, в иночестве Евфросинии, Муромских чудотворцев."},
+		{petr_fevron_murom,  "Перенесение мощей блгвв. кн. Петра, в иночестве Давида, и кн. Февронии, в иночестве Евфросинии, Муромских чудотворцев."},
 		{sub_pered14sent,    "Суббота пред Воздвижением."},
 		{ned_pered14sent,    "Неделя пред Воздвижением."},
 		{sub_po14sent,       "Суббота по Воздвижении."},
@@ -2988,9 +3041,9 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
 		{blag_otdanie,            "Отдание праздника Благовещения Пресвятой Богородицы. Собор Архангела Гаврии́ла."},
 		{georgia_pob,             "Вмч. Гео́ргия Победоно́сца. Мц. царицы Александры."},
 		{obret_gl_ioanna3,        "Третье обре́тение главы Предтечи и Крестителя Господня Иоанна."},
-		{ned_popetraipavla,       "Собор Тверских святых."},
+		{sobor_tversk,            "Собор Тверских святых."},
 		{ned_pod16iulya,          "Память святых отцов шести Вселенских Соборов."},
-		{ned_pered18avg,          "Собор Кемеровских святых."}
+		{sobor_kemero,            "Собор Кемеровских святых."}
 	};
 	auto get_dn_str = [](int8_t d) -> std::string {
 		std::string s{};
