@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.14)
+project(oxc)
+find_package(Boost 1.85 REQUIRED)
+add_library(${PROJECT_NAME} STATIC oxc.cpp)
+target_include_directories(${PROJECT_NAME} PRIVATE ${Boost_INCLUDE_DIRS})
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
