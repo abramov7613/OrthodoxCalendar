@@ -2243,7 +2243,6 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 		dd = decrement_date_(dd, 1, b);
 	} while (true);
 	//расчет Двунадесятые переходящие праздники
-	add_marker_for_date_(pasha_date,                   dvana10_per_prazd);
 	add_marker_for_date_(get_date_(vel_post_d0n7),     dvana10_per_prazd);
 	add_marker_for_date_(get_date_(s6popashe_4),       dvana10_per_prazd);
 	add_marker_for_date_(get_date_(ned8_popashe),      dvana10_per_prazd);
