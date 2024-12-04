@@ -7,12 +7,22 @@
 #### Требования
 
 * компилятор стандарта c++20
-* библиотека boost::multiprecision
+* cmake version >= 3.16
+при первом запуске cmake требуется интернет, т.к. CPM подгружает зависимости с github
 
 #### Пример использования:
+```
+mkdir some_dir
+cd some_dir
+git clone https://github.com/abramov7613/OrthodoxCalendar.git
+touch main.cpp
+touch CMakeLists.txt
+```
+
+main.cpp
 ```c++
-#include "oxc.h"
 #include <iostream>
+#include "oxc.h"
 
 int main(int argc, char** argv)
 {
@@ -40,3 +50,22 @@ int main(int argc, char** argv)
 	}
 }
 ```
+
+CMakeLists.txt
+```
+cmake_minimum_required(VERSION 3.16)
+project(main)
+add_subdirectory(OrthodoxCalendar)
+add_executable(${PROJECT_NAME} main.cpp)
+target_link_libraries(${PROJECT_NAME} oxc)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
+target_include_directories(${PROJECT_NAME} PRIVATE
+	"${CMAKE_CURRENT_SOURCE_DIR}/OrthodoxCalendar"
+)
+```
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=MinSizeRel
+cmake --build build
+```
+
