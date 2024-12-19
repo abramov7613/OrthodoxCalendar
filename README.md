@@ -26,28 +26,31 @@ main.cpp
 
 int main(int argc, char** argv)
 {
-	if(argc<2) {
-		std::cout << "использование:\n" << argv[0] << " <число года>" << std::endl;
-		return -1;
-	}
-	try
-	{
-		oxc::OrthodoxCalendar calendar;
-		auto stable_days = calendar.get_alldates_with(argv[1], oxc::dvana10_nep_prazd);
-		auto unstable_days = calendar.get_alldates_with(argv[1], oxc::dvana10_per_prazd);
-		auto great_days = calendar.get_alldates_with(argv[1], oxc::vel_prazd);
-		std::cout << argv[1] << " год\nДвунадесятые переходящие праздники:\n"
-			<< calendar.get_description_for_dates(unstable_days.value())
-			<< "\nДвунадесятые непереходящие праздники:\n"
-			<< calendar.get_description_for_dates(stable_days.value())
-			<< "\nВеликие праздники:\n"
-			<< calendar.get_description_for_dates(great_days.value()) << std::endl;
-	}
-	catch(const std::exception& e)
-	{
-		std::cout << e.what() << std::endl;
-		return -1;
-	}
+  if(argc<2) {
+    std::cout << "использование:\n" << argv[0] << " <число года>" << std::endl;
+    return -1;
+  }
+  try
+  {
+    oxc::OrthodoxCalendar calendar;
+    auto easter_date = calendar.julian_pascha(argv[1]);
+    auto stable_days = calendar.get_alldates_with(argv[1], oxc::dvana10_nep_prazd);
+    auto unstable_days = calendar.get_alldates_with(argv[1], oxc::dvana10_per_prazd);
+    auto great_days = calendar.get_alldates_with(argv[1], oxc::vel_prazd);
+    std::cout << argv[1] << " год\n"
+      << calendar.get_description_for_date(argv[1], easter_date.first, easter_date.second)
+      << "\nДвунадесятые переходящие праздники:\n"
+      << calendar.get_description_for_dates(unstable_days.value())
+      << "\nДвунадесятые непереходящие праздники:\n"
+      << calendar.get_description_for_dates(stable_days.value())
+      << "\nВеликие праздники:\n"
+      << calendar.get_description_for_dates(great_days.value()) << std::endl;
+  }
+  catch(const std::exception& e)
+  {
+    std::cout << e.what() << std::endl;
+    return -1;
+  }
 }
 ```
 
@@ -60,7 +63,7 @@ add_executable(${PROJECT_NAME} main.cpp)
 target_link_libraries(${PROJECT_NAME} oxc)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 target_include_directories(${PROJECT_NAME} PRIVATE
-	"${CMAKE_CURRENT_SOURCE_DIR}/OrthodoxCalendar"
+  "${CMAKE_CURRENT_SOURCE_DIR}/OrthodoxCalendar"
 )
 ```
 
