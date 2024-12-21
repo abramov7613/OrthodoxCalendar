@@ -2767,13 +2767,12 @@ std::optional<ShortDate> OrthYear::get_date_with(uint16_t m) const
 std::optional<std::vector<ShortDate>> OrthYear::get_alldates_with(uint16_t m) const
 {
   if(m<1) return std::nullopt;
-  auto d = static_cast<uint16_t>(m);
-  auto [begin, end] = std::equal_range(data2.begin(), data2.end(), d);
+  auto [begin, end] = std::equal_range(data2.begin(), data2.end(), m);
   if(begin==data2.end()) return std::nullopt;
-  int sz = std::distance(begin, end);
-  if(sz<1) return std::nullopt;
-  std::vector<ShortDate> res (static_cast<size_t>(sz));
-  std::transform(begin, end, res.begin(), [](const auto& e){ return ShortDate{e.month, e.day}; });
+  std::vector<ShortDate> res ;
+  std::transform(begin, end, std::back_inserter(res),
+        [](const auto& e){ return ShortDate{e.month, e.day}; });
+  if(res.empty()) return std::nullopt;
   return res;
 }
 
@@ -3612,6 +3611,7 @@ std::optional<std::vector<year_month_day>> OrthodoxCalendar::impl::get_alldates_
             return julian_to_grigorian(year, e.first, e.second);
           });
         }
+        if(res.empty()) return std::nullopt;
         return res;
       }
     }
@@ -3660,6 +3660,7 @@ std::optional<std::vector<year_month_day>> OrthodoxCalendar::impl::get_alldates_
     auto end = std::upper_bound(semiresult.begin(), semiresult.end(), j2);
     result.reserve(semiresult.size());
     std::copy(begin, end, std::back_inserter(result));
+    if(result.empty()) return std::nullopt;
     if(outfmt==Grigorian) {
       std::transform(result.cbegin(), result.cend(), result.begin(), [this](auto& e){
         return julian_to_grigorian(e);
@@ -3843,6 +3844,7 @@ std::optional<std::vector<year_month_day>> OrthodoxCalendar::impl::get_alldates_
     auto end = std::upper_bound(semiresult.begin(), semiresult.end(), j2);
     result.reserve(semiresult.size());
     std::copy(begin, end, std::back_inserter(result));
+    if(result.empty()) return std::nullopt;
     if(outfmt==Grigorian) {
       std::transform(result.cbegin(), result.cend(), result.begin(), [this](auto& e){
         return julian_to_grigorian(e);

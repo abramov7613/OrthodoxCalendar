@@ -33,12 +33,13 @@ int main(int argc, char** argv)
   try
   {
     oxc::OrthodoxCalendar calendar;
-    auto easter_date = calendar.julian_pascha(argv[1]);
-    auto stable_days = calendar.get_alldates_with(argv[1], oxc::dvana10_nep_prazd);
-    auto unstable_days = calendar.get_alldates_with(argv[1], oxc::dvana10_per_prazd);
-    auto great_days = calendar.get_alldates_with(argv[1], oxc::vel_prazd);
-    std::cout << argv[1] << " год\n"
-      << calendar.get_description_for_date(argv[1], easter_date.first, easter_date.second)
+    std::string year = argv[1];
+    auto [easter_month, easter_day] = calendar.julian_pascha(year);
+    auto stable_days = calendar.get_alldates_with(year, oxc::dvana10_nep_prazd);
+    auto unstable_days = calendar.get_alldates_with(year, oxc::dvana10_per_prazd);
+    auto great_days = calendar.get_alldates_with(year, oxc::vel_prazd);
+    std::cout << year << " год\n"
+      << calendar.get_description_for_date(year, easter_month, easter_day)
       << "\nДвунадесятые переходящие праздники:\n"
       << calendar.get_description_for_dates(unstable_days.value())
       << "\nДвунадесятые непереходящие праздники:\n"
