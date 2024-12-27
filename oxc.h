@@ -107,19 +107,37 @@ class OrthodoxCalendar {
   std::unique_ptr<impl> pimpl;
 public:
   /**
-   * структура для определения евангельских / апостольских чтений
+   * класс для определения евангельских / апостольских чтений
    */
-  struct ApostolEvangelieReadings {
+  class ApostolEvangelieReadings {
+    friend class OrthodoxCalendar;
     /**
      * старшие 4 бита определяют книгу : `1=апостол`, `2=от матфея`, `3=от марка`, `4=от луки`, `5=от иоанна`<br>
      * младшие 12 бит - определяют номер зачала
      */
-    uint16_t n{};
+    uint16_t n;
     /**
      * может быть пустым или содержать уточняющий комментарий зачала.
      */
     std::string_view c;
+  public:
+    ApostolEvangelieReadings() : n{}, c{} {}
+    ApostolEvangelieReadings(uint16_t a, std::string_view b) : n(a), c(b) {}
+    /**
+     * метод возвращает идентификатор богослужебной книги :
+     * `1=апостол`, `2=от матфея`, `3=от марка`, `4=от луки`, `5=от иоанна`
+     */
+    auto book() const { return static_cast<uint16_t>(n & 0xF); }
+    /**
+     * метод возвращает номер зачала
+     */
+    auto zach() const { return static_cast<uint16_t>(n >> 4); }
+    /**
+     * метод возвращает комментарий для зачала (если есть)
+     */
+    auto comment() const { return c; }
     bool operator==(const ApostolEvangelieReadings&) const = default;
+    operator bool() const { return n>0; }
   };
   OrthodoxCalendar();
   OrthodoxCalendar(const OrthodoxCalendar&) = delete;
@@ -250,9 +268,9 @@ public:
    *  \param [in] m число месяца
    *  \param [in] d число дня
    *  \param [in] infmt тип календаря для даты
-   *  \return oxc::OrthodoxCalendar::ApostolEvangelieReadings или std::nullopt
+   *  \return oxc::OrthodoxCalendar::ApostolEvangelieReadings
    */
-  std::optional<ApostolEvangelieReadings> date_apostol(const std::string& y, const int8_t m, const int8_t d,
+  ApostolEvangelieReadings date_apostol(const std::string& y, const int8_t m, const int8_t d,
         const CalendarFormat infmt=Julian) const;
   /**
    *   Метод вычисляет рядовые литургийные чтения Евангелия указанной даты. Праздники не учитываются.
@@ -260,9 +278,9 @@ public:
    *  \param [in] m число месяца
    *  \param [in] d число дня
    *  \param [in] infmt тип календаря для даты
-   *  \return oxc::OrthodoxCalendar::ApostolEvangelieReadings или std::nullopt
+   *  \return oxc::OrthodoxCalendar::ApostolEvangelieReadings
    */
-  std::optional<ApostolEvangelieReadings> date_evangelie(const std::string& y, const int8_t m, const int8_t d,
+  ApostolEvangelieReadings date_evangelie(const std::string& y, const int8_t m, const int8_t d,
         const CalendarFormat infmt=Julian) const;
   /**
    *   Метод вычисляет воскресные Евангелия утрени для указанной даты.
@@ -270,9 +288,9 @@ public:
    *  \param [in] m число месяца
    *  \param [in] d число дня
    *  \param [in] infmt тип календаря для даты
-   *  \return oxc::OrthodoxCalendar::ApostolEvangelieReadings или std::nullopt
+   *  \return oxc::OrthodoxCalendar::ApostolEvangelieReadings
    */
-  std::optional<ApostolEvangelieReadings> resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d,
+  ApostolEvangelieReadings resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d,
         const CalendarFormat infmt=Julian) const;
   /**
    *  Метод проверяет соответствует ли указанная дата признаку property

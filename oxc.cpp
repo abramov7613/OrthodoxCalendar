@@ -736,9 +736,8 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
             ApEvReads{ 0X102, "Мф., 16 зач., VI, 1–13."}  //сб
           }
   };
-  auto evangelie_table1_get_chteniya = [](int8_t n50, int8_t dn)->ApEvReads {
-    const ApEvReads & ref = evangelie_table_1.at(n50).at(dn);
-    return {ref.n, ref.c};
+  auto evangelie_table1_get_chteniya = [](int8_t n50, int8_t dn) {
+    return ApEvReads(evangelie_table_1.at(n50).at(dn));
   };
   //таблица рядовых чтений на литургии из приложения богосл.апостола. период от св. троицы до нед. сыропустная
   //двумерный массив [a][b], где а - календарный номер по пятидесятнице. b - деньнедели.
@@ -1040,9 +1039,8 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
             ApEvReads{ 0X731, "Рим., 115 зач., XIV, 19–26."}  //сб
           }
   };
-  auto apostol_table1_get_chteniya = [](int8_t n50, int8_t dn)->ApEvReads {
-    const ApEvReads & ref = apostol_table_1.at(n50).at(dn);
-    return {ref.n, ref.c};
+  auto apostol_table1_get_chteniya = [](int8_t n50, int8_t dn) {
+    return ApEvReads(apostol_table_1.at(n50).at(dn));
   };
   //таблица рядовых чтений на литургии из приложения богосл.евангелия. период от начала вел.поста до Троицкая суб.вкл.
   //асс.массив, где first - константа-признак даты (блок 1 - переходящие дни года)
@@ -1115,20 +1113,18 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
     {134,  { 0X732, "Мф., 115 зач., XXVIII, 1–20." } } //великую Субботу
   };
   auto evangelie_table2_get_chteniya = [](const std::set<uint16_t>& markers)->ApEvReads {
-    ApEvReads res{};
-    if(markers.empty()) return res;
+    if(markers.empty()) return ApEvReads();
     std::vector<uint16_t> t_(evangelie_table_2.size());
     std::transform(evangelie_table_2.cbegin(), evangelie_table_2.cend(),
                     t_.begin(),
                     [](const auto& e){ return e.first; });
     auto fr1 = std::find_first_of(markers.begin(), markers.end(), t_.begin(), t_.end());
-    if(fr1==markers.end()) return res;
-    auto fr2 = evangelie_table_2.find(*fr1);
-    if(fr2 != evangelie_table_2.end()) {
-      res.n = fr2->second.n;
-      res.c = fr2->second.c;
+    if(fr1==markers.end()) return ApEvReads();
+    if(auto fr2 = evangelie_table_2.find(*fr1); fr2 != evangelie_table_2.end()) {
+      return ApEvReads(fr2->second);
+    } else {
+      return ApEvReads();
     }
-    return res;
   };
   //таблица рядовых чтений на литургии из приложения богосл.апостола. период от начала вел.поста до Троицкая суб.вкл.
   //асс.массив, где first - константа-признак даты (блок 1 - переходящие дни года)
@@ -1199,20 +1195,18 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
 
   };
   auto apostol_table2_get_chteniya = [](const std::set<uint16_t>& markers)->ApEvReads {
-    ApEvReads res{};
-    if(markers.empty()) return res;
+    if(markers.empty()) return ApEvReads();
     std::vector<uint16_t> t_(apostol_table_2.size());
     std::transform(apostol_table_2.cbegin(), apostol_table_2.cend(),
                     t_.begin(),
                     [](const auto& e){ return e.first; });
     auto fr1 = std::find_first_of(markers.begin(), markers.end(), t_.begin(), t_.end());
-    if(fr1==markers.end()) return res;
-    auto fr2 = apostol_table_2.find(*fr1);
-    if(fr2 != apostol_table_2.end()) {
-      res.n = fr2->second.n;
-      res.c = fr2->second.c;
+    if(fr1==markers.end()) return ApEvReads();
+    if(auto fr2 = apostol_table_2.find(*fr1); fr2 != apostol_table_2.end()) {
+      return ApEvReads(fr2->second);
+    } else {
+      return ApEvReads();
     }
-    return res;
   };
   //prepare second ctor parameter
   std::array<int,5> zimn_otstupka_n5;
@@ -3225,12 +3219,9 @@ public:
   int8_t weekday_for_date(const std::string& y, const int8_t m, const int8_t d, const CalendarFormat infmt) const;
   std::optional<std::vector<uint16_t>> date_properties(const std::string& y, const int8_t m,
         const int8_t d, const CalendarFormat infmt) const;
-  std::optional<ApEvReads> date_apostol(const std::string& y, const int8_t m,
-        const int8_t d, const CalendarFormat infmt) const;
-  std::optional<ApEvReads> date_evangelie(const std::string& y, const int8_t m,
-        const int8_t d, const CalendarFormat infmt) const;
-  std::optional<ApEvReads> resurrect_evangelie(const std::string& y, const int8_t m,
-        const int8_t d, const CalendarFormat infmt) const;
+  ApEvReads date_apostol(const std::string& y, const int8_t m, const int8_t d, const CalendarFormat infmt) const;
+  ApEvReads date_evangelie(const std::string& y, const int8_t m, const int8_t d, const CalendarFormat infmt) const;
+  ApEvReads resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d, const CalendarFormat infmt) const;
   bool is_date_of(const std::string& y, const int8_t m, const int8_t d,
         oxc_const property, const CalendarFormat infmt) const;
   std::optional<year_month_day> get_date_with(const std::string& year, oxc_const property,
@@ -3295,7 +3286,7 @@ private:
   }
 
   using MethodPtr2 = ApEvReads (OrthYear::*)(int8_t, int8_t) const;
-  std::optional<ApEvReads> get_date_reads(const std::string& y, const int8_t m, const int8_t d,
+  ApEvReads get_date_reads(const std::string& y, const int8_t m, const int8_t d,
         const CalendarFormat infmt, MethodPtr2 mptr) const
   {
     year_month_day ymd {y, m, d};
@@ -3303,11 +3294,9 @@ private:
     std::string& year = ymd.year;
     if(auto p=orthyear_cache.get_or_make(year, year, get_options().first, osen_otstupka_apostol); p) {
       auto* rawptr = p.get();
-      auto res = (rawptr->*mptr)(ymd.month, ymd.day);
-      if(res.n < 1) return std::nullopt;
-      return res;
+      return (rawptr->*mptr)(ymd.month, ymd.day);
     }
-    return std::nullopt;
+    return {};
   }
 };
 
@@ -3537,19 +3526,19 @@ std::optional<std::vector<uint16_t>> OrthodoxCalendar::impl::date_properties(con
   return std::nullopt;
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::impl::date_apostol(const std::string& y, const int8_t m,
+ApEvReads OrthodoxCalendar::impl::date_apostol(const std::string& y, const int8_t m,
       const int8_t d, const CalendarFormat infmt) const
 {
   return get_date_reads(y, m, d, infmt, &OrthYear::get_date_apostol);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::impl::date_evangelie(const std::string& y, const int8_t m,
+ApEvReads OrthodoxCalendar::impl::date_evangelie(const std::string& y, const int8_t m,
       const int8_t d, const CalendarFormat infmt) const
 {
   return get_date_reads(y, m, d, infmt, &OrthYear::get_date_evangelie);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::impl::resurrect_evangelie(const std::string& y, const int8_t m,
+ApEvReads OrthodoxCalendar::impl::resurrect_evangelie(const std::string& y, const int8_t m,
       const int8_t d, const CalendarFormat infmt) const
 {
   return get_date_reads(y, m, d, infmt, &OrthYear::get_resurrect_evangelie);
@@ -4086,19 +4075,19 @@ std::optional<std::vector<uint16_t>> OrthodoxCalendar::date_properties(const std
   return pimpl->date_properties(y, m, d, infmt);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::date_apostol(const std::string& y, const int8_t m, const int8_t d,
+ApEvReads OrthodoxCalendar::date_apostol(const std::string& y, const int8_t m, const int8_t d,
       const CalendarFormat infmt) const
 {
   return pimpl->date_apostol(y, m, d, infmt);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::date_evangelie(const std::string& y, const int8_t m, const int8_t d,
+ApEvReads OrthodoxCalendar::date_evangelie(const std::string& y, const int8_t m, const int8_t d,
       const CalendarFormat infmt) const
 {
   return pimpl->date_evangelie(y, m, d, infmt);
 }
 
-std::optional<ApEvReads> OrthodoxCalendar::resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d,
+ApEvReads OrthodoxCalendar::resurrect_evangelie(const std::string& y, const int8_t m, const int8_t d,
       const CalendarFormat infmt) const
 {
   return pimpl->resurrect_evangelie(y, m, d, infmt);
