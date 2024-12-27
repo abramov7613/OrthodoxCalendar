@@ -26,10 +26,8 @@
 */
 
 #include "oxc.h"
-#include <bits/std_abs.h>                                  // for abs
 #include <algorithm>                                       // for copy, tran...
 #include <array>                                           // for array, arr...
-#include <boost/cstdint.hpp>                               // for int8_t
 #include <boost/multiprecision/cpp_int.hpp>                // for cpp_int_ba...
 #include <compare>                                         // for common_com...
 #include <cstdlib>                                         // for abs, size_t
@@ -1259,7 +1257,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   auto is_visokos = [](const big_int& y) { return (y%4)==0; };
   const bool b = is_visokos(y);
   const bool b1 = is_visokos(y-1);
-  ShortDate ned_pr, nachalo_posta, t1, t2, t3;
+  ShortDate nachalo_posta, t1, t2, t3;
   ShortDate dd {pasha_date};
   int i = 0, j = 0, glas = 8;
   bool f = false;
@@ -1618,7 +1616,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   do {
     i = get_dn_(dd);
     if(i==0) {
-      add_marker_for_date_(dd, ned_popreobrajenii);
+      add_marker_for_date_(dd, sobor_valaam);
       break;
     }
     dd = increment_date_(dd, 1, b);
@@ -1678,7 +1676,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   i = get_dn_(dd);
   switch (i) {
     case 0: {
-      add_marker_for_date_(dd, ned_pod11okt);
+      add_marker_for_date_(dd, sobor_otcev7sobora);
     }
     break;
     case 1: {}
@@ -1688,7 +1686,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
         dd = decrement_date_(dd, 1, b);
         i = get_dn_(dd);
         if(i==0) {
-          add_marker_for_date_(dd, ned_pod11okt);
+          add_marker_for_date_(dd, sobor_otcev7sobora);
           break;
         }
       } while(true);
@@ -1701,7 +1699,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
         dd = increment_date_(dd, 1, b);
         i = get_dn_(dd);
         if(i==0) {
-          add_marker_for_date_(dd, ned_pod11okt);
+          add_marker_for_date_(dd, sobor_otcev7sobora);
           break;
         }
       } while(true);
@@ -1724,7 +1722,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   i = get_dn_(dd);
   switch (i) {
     case 0: {
-      add_marker_for_date_(dd, ned_pod1noyabr);
+      add_marker_for_date_(dd, sobor_bessrebren);
     }
     break;
     case 1: { }
@@ -1734,7 +1732,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
         dd = decrement_date_(dd, 1, b);
         i = get_dn_(dd);
         if(i==0) {
-          add_marker_for_date_(dd, ned_pod1noyabr);
+          add_marker_for_date_(dd, sobor_bessrebren);
           break;
         }
       } while(true);
@@ -1747,7 +1745,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
         dd = increment_date_(dd, 1, b);
         i = get_dn_(dd);
         if(i==0) {
-          add_marker_for_date_(dd, ned_pod1noyabr);
+          add_marker_for_date_(dd, sobor_bessrebren);
           break;
         }
       } while(true);
@@ -1755,16 +1753,17 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
     break;
     default: { }
   };
-  //неделя св.праотец от11до17 дек.
+  //нед.св.отец перед рождеством от 18до24 дек.
   dd = make_pair(12,24);
   do {
     i = get_dn_(dd);
     if(i==0) {
-      ned_pr = dd;
+      add_marker_for_date_(dd, ned_peredrojd);
       break;
     }
     dd = decrement_date_(dd, 1, b);
   } while (true);
+  //неделя св.праотец от11до17 дек.
   dd = decrement_date_(dd, 1, b);
   do {
     i = get_dn_(dd);
@@ -1784,44 +1783,6 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
     }
     dd = decrement_date_(dd, 1, b);
   } while (true);
-  //нед.св.отец перед рождеством от 18до24 дек.
-  add_marker_for_date_(ned_pr, ned_peredrojd);
-  //Суббота+воскресение после рождества
-  i = get_dn_(make_pair(12,25));
-  switch(i) {
-    case 6: { }
-    case 0: {
-      add_marker_for_date_(make_pair(12,31), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,26), ned_porojdestve);
-    }
-    break;
-    case 1: {
-      add_marker_for_date_(make_pair(12,30), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,31), ned_porojdestve);
-    }
-    break;
-    case 2: {
-      add_marker_for_date_(make_pair(12,29), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,30), ned_porojdestve);
-    }
-    break;
-    case 3: {
-      add_marker_for_date_(make_pair(12,28), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,29), ned_porojdestve);
-    }
-    break;
-    case 4: {
-      add_marker_for_date_(make_pair(12,27), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,28), ned_porojdestve);
-    }
-    break;
-    case 5: {
-      add_marker_for_date_(make_pair(12,26), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,27), ned_porojdestve);
-    }
-    break;
-    default: {}
-  };
   //неделя мытаря и фарисея
   dd = decrement_date_(pasha_date, 70, b);
   add_markers_for_date_(dd, {ned_mitar_ifaris, full7_mitar});
@@ -1951,11 +1912,57 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   add_markers_for_date_(dd, {vel_post_d5n7, post_vel});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {vel_post_d6n7, post_vel});
-  //Суббота пред Богоявлением u неделя пред Богоявлением
-  i = get_dn_prev_year(make_pair(12,25));
+  //Суббота пред Богоявлением (в конце года) (типикон стр.380)
+  i = get_dn_(make_pair(12,25));
+  if(i==0) add_marker_for_date_(make_pair(12,31), sub_peredbogoyav);
+  if(i==1) add_marker_for_date_(make_pair(12,30), sub_peredbogoyav);
+  //Суббота+воскресение после рождества
   switch(i) {
+    case 6: {}
+    case 0: {
+      dd = make_pair(12,31);
+      switch(get_dn_(dd)) {
+        case 6: { add_marker_for_date_(dd, sub_porojdestve); } break;
+        default: { add_marker_for_date_(dd, sub_porojdestve_r); }
+      };
+      dd = make_pair(12,26);
+      switch(get_dn_(dd)) {
+        case 0: { add_marker_for_date_(dd, ned_porojdestve); } break;
+        default: { add_marker_for_date_(dd, ned_porojdestve_r); }
+      };
+    }
+    break;
+    case 1: {
+      add_marker_for_date_(make_pair(12,30), sub_porojdestve);
+      add_marker_for_date_(make_pair(12,31), ned_porojdestve);
+    }
+    break;
     case 2: {
-      add_marker_for_date_(make_pair(1,5), sub_peredbogoyav_m1);
+      add_marker_for_date_(make_pair(12,29), sub_porojdestve);
+      add_marker_for_date_(make_pair(12,30), ned_porojdestve);
+    }
+    break;
+    case 3: {
+      add_marker_for_date_(make_pair(12,28), sub_porojdestve);
+      add_marker_for_date_(make_pair(12,29), ned_porojdestve);
+    }
+    break;
+    case 4: {
+      add_marker_for_date_(make_pair(12,27), sub_porojdestve);
+      add_marker_for_date_(make_pair(12,28), ned_porojdestve);
+    }
+    break;
+    case 5: {
+      add_marker_for_date_(make_pair(12,26), sub_porojdestve);
+      add_marker_for_date_(make_pair(12,27), ned_porojdestve);
+    }
+    break;
+    default: {}
+  };
+  //Суббота пред Богоявлением u неделя пред Богоявлением (в начале года)
+  switch( get_dn_prev_year(make_pair(12,25)) ) {
+    case 2: {
+      add_marker_for_date_(make_pair(1,5), sub_peredbogoyav);
       add_marker_for_date_(make_pair(1,1), ned_peredbogoyav);
     }
     break;
@@ -1965,30 +1972,27 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
     }
     break;
     case 3: {
-      add_marker_for_date_(make_pair(1,4), sub_peredbogoyav_m1);
+      add_marker_for_date_(make_pair(1,4), sub_peredbogoyav);
       add_marker_for_date_(make_pair(1,5), ned_peredbogoyav);
     }
     break;
     case 4: {
-      add_marker_for_date_(make_pair(1,3), sub_peredbogoyav_m1);
+      add_marker_for_date_(make_pair(1,3), sub_peredbogoyav);
       add_marker_for_date_(make_pair(1,4), ned_peredbogoyav);
     }
     break;
     case 5: {
-      add_marker_for_date_(make_pair(1,2), sub_peredbogoyav_m1);
+      add_marker_for_date_(make_pair(1,2), sub_peredbogoyav);
       add_marker_for_date_(make_pair(1,3), ned_peredbogoyav);
     }
     break;
     case 6: {
-      add_marker_for_date_(make_pair(1,1), sub_peredbogoyav_m1);
+      add_marker_for_date_(make_pair(1,1), sub_peredbogoyav);
       add_marker_for_date_(make_pair(1,2), ned_peredbogoyav);
     }
     break;
     default: {}
   };
-  i = get_dn_(make_pair(12,25));
-  if(i==0) add_marker_for_date_(make_pair(12,31), sub_peredbogoyav_m12);
-  if(i==1) add_marker_for_date_(make_pair(12,30), sub_peredbogoyav_m12);
   //Суббота пo Богоявление
   dd = make_pair(1,7);
   do {
@@ -2014,7 +2018,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   i = get_dn_(dd);
   switch (i) {
     case 0: {
-      add_marker_for_date_(dd, ned_pod25yanv);
+      add_marker_for_date_(dd, sobor_novom_rus);
     }
     break;
     case 1: { }
@@ -2024,7 +2028,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
         dd = decrement_date_(dd, 1, b);
         i = get_dn_(dd);
         if(i==0) {
-          add_marker_for_date_(dd, ned_pod25yanv);
+          add_marker_for_date_(dd, sobor_novom_rus);
           break;
         }
       } while(true);
@@ -2037,7 +2041,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
         dd = increment_date_(dd, 1, b);
         i = get_dn_(dd);
         if(i==0) {
-          add_marker_for_date_(dd, ned_pod25yanv);
+          add_marker_for_date_(dd, sobor_novom_rus);
           break;
         }
       } while(true);
@@ -2217,7 +2221,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   i = get_dn_(dd);
   switch (i) {
     case 0: {
-      add_marker_for_date_(dd, ned_pod16iulya);
+      add_marker_for_date_(dd, sobor_otcev_1_6sob);
     }
     break;
     case 1: { }
@@ -2227,7 +2231,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
         dd = decrement_date_(dd, 1, b);
         i = get_dn_(dd);
         if(i==0) {
-          add_marker_for_date_(dd, ned_pod16iulya);
+          add_marker_for_date_(dd, sobor_otcev_1_6sob);
           break;
         }
       } while(true);
@@ -2240,7 +2244,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
         dd = increment_date_(dd, 1, b);
         i = get_dn_(dd);
         if(i==0) {
-          add_marker_for_date_(dd, ned_pod16iulya);
+          add_marker_for_date_(dd, sobor_otcev_1_6sob);
           break;
         }
       } while(true);
@@ -2879,20 +2883,20 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
     {ned2_po50,          "Неделя 2-я по Пятидесятнице, Всех святых, в земле Русской просиявших."},
     {ned3_po50,          "Неделя 3-я по Пятидесятнице. Собор всех новоявле́нных мучеников Христовых по взятии Царяграда пострадавших. Собор Новгородских святых. Собор Белорусских святых. Собор святых Санкт-Петербургской митрополии."},
     {ned4_po50,          "Неделя 4-я по Пятидесятнице. Собор преподобных отцов Псково-Печерских."},
-    {ned_popreobrajenii, "Собо́р преподо́бных отце́в, на Валаа́ме просия́вших."},
+    {sobor_valaam,       "Собо́р преподо́бных отце́в, на Валаа́ме просия́вших."},
     {petr_fevron_murom,  "Перенесение мощей блгвв. кн. Петра, в иночестве Давида, и кн. Февронии, в иночестве Евфросинии, Муромских чудотворцев."},
     {sub_pered14sent,    "Суббота пред Воздвижением."},
     {ned_pered14sent,    "Неделя пред Воздвижением."},
     {sub_po14sent,       "Суббота по Воздвижении."},
     {ned_po14sent,       "Неделя по Воздвижении."},
-    {ned_pod11okt,       "Память святых отцов VII Вселенского Собора."},
+    {sobor_otcev7sobora, "Память святых отцов VII Вселенского Собора."},
     {sub_dmitry,         "Димитриевская родительская суббота."},
-    {ned_pod1noyabr,     "Собор всех Бессребреников."},
+    {sobor_bessrebren,   "Собор всех Бессребреников."},
     {ned_praotec,        "Неделя святых пра́отец."},
     {sub_peredrojd,      "Суббота пред Рождеством Христовым."},
     {ned_peredrojd,      "Неделя пред Рождеством Христовым, святых отец."},
-    {sub_porojdestve,    "Чтения субботы по Рождестве Христовом."},
-    {ned_porojdestve,    "Чтения недели по Рождестве Христовом. Праведных Ио́сифа Обру́чника, Дави́да царя и Иа́кова, брата Господня."},
+    {sub_porojdestve,    "Суббота по Рождестве Христовом."},
+    {ned_porojdestve,    "Неделя по Рождестве Христовом."},
     {ned_mitar_ifaris,   "Неделя о мытаре́ и фарисе́е."},
     {ned_obludnom,       "Неделя о блудном сыне."},
     {sub_myasopust,      "Суббота мясопу́стная. Вселенская родительская суббота."},
@@ -2917,7 +2921,7 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
     {vel_post_d4n2,      "Четверг 2-й седмицы великого поста."},
     {vel_post_d5n2,      "Пятница 2-й седмицы великого поста."},
     {vel_post_d6n2,      "Суббота 2-й седмицы великого поста."},
-    {vel_post_d0n3,      "Неделя 2-я Великого поста. Свт. Григория Пала́мы, архиеп. Фессалони́тского. Собор преподобных отец Киево-Печерских и всех святых, в Малой России просиявших."},
+    {vel_post_d0n3,      "Неделя 2-я Великого поста."},
     {vel_post_d1n3,      "Понедельник 3-й седмицы великого поста."},
     {vel_post_d2n3,      "Вторник 3-й седмицы великого поста."},
     {vel_post_d3n3,      "Среда 3-й седмицы великого поста."},
@@ -2931,14 +2935,14 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
     {vel_post_d4n4,      "Четверг 4-й седмицы вел. поста, Крестопоклонной."},
     {vel_post_d5n4,      "Пятница 4-й седмицы вел. поста, Крестопоклонной."},
     {vel_post_d6n4,      "Суббота 4-й седмицы вел. поста, Крестопоклонной."},
-    {vel_post_d0n5,      "Неделя 4-я Великого поста. Прп. Иоанна Ле́ствичника."},
+    {vel_post_d0n5,      "Неделя 4-я Великого поста."},
     {vel_post_d1n5,      "Понедельник 5-й седмицы великого поста."},
     {vel_post_d2n5,      "Вторник 5-й седмицы великого поста."},
     {vel_post_d3n5,      "Среда 5-й седмицы великого поста."},
     {vel_post_d4n5,      "Четверг 5-й седмицы великого поста."},
     {vel_post_d5n5,      "Пятница 5-й седмицы великого поста."},
     {vel_post_d6n5,      "Суббота 5-й седмицы великого поста. Суббота Ака́фиста. Похвала́ Пресвятой Богородицы."},
-    {vel_post_d0n6,      "Неделя 5-я Великого поста. Прп. Марии Египетской."},
+    {vel_post_d0n6,      "Неделя 5-я Великого поста."},
     {vel_post_d1n6,      "Понедельник 6-й седмицы великого поста. ва́ий."},
     {vel_post_d2n6,      "Вторник 6-й седмицы великого поста. ва́ий."},
     {vel_post_d3n6,      "Среда 6-й седмицы великого поста. ва́ий."},
@@ -3033,12 +3037,11 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
   };
   //таблица - названия других дней (блок 3)
   static const std::map<uint16_t, std::string_view> other_dates_str = {
-    {sub_peredbogoyav_m12,    "Чтения субботы перед Богоявлением."},
-    {sub_peredbogoyav_m1,     "Чтения субботы перед Богоявлением."},
-    {ned_peredbogoyav,        "Чтения недели перед Богоявлением."},
+    {sub_peredbogoyav,        "Суббота перед Богоявлением."},
+    {ned_peredbogoyav,        "Неделя перед Богоявлением."},
     {sub_pobogoyav,           "Суббота по Богоявлении."},
     {ned_pobogoyav,           "Неделя по Богоявлении."},
-    {ned_pod25yanv,           "Собор новомучеников и исповедников Церкви Русской."},
+    {sobor_novom_rus,         "Собор новомучеников и исповедников Церкви Русской."},
     {sobor_3sv,               "Собор вселенских учителей и святителей Василия Великого, Григория Богослова и Иоанна Златоустого."},
     {sretenie_predpr,         "Предпразднство Сре́тения Господня."},
     {sretenie,                "Сре́тение Господа Бога и Спаса нашего Иисуса Христа."},
@@ -3056,8 +3059,29 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
     {georgia_pob,             "Вмч. Гео́ргия Победоно́сца. Мц. царицы Александры."},
     {obret_gl_ioanna3,        "Третье обре́тение главы Предтечи и Крестителя Господня Иоанна."},
     {sobor_tversk,            "Собор Тверских святых."},
-    {ned_pod16iulya,          "Память святых отцов шести Вселенских Соборов."},
-    {sobor_kemero,            "Собор Кемеровских святых."}
+    {sobor_otcev_1_6sob,      "Память святых отцов шести Вселенских Соборов."},
+    {sobor_kemero,            "Собор Кемеровских святых."},
+    {pahomii_kensk           ,"Прп. Пахомия Кенского (XVI) (переходящее празднование в субботу по Богоявлении)."},
+    {shio_mg                 ,"Прп.Шио Мгвимского (VI) (Груз.) (переходящее празднование в четверг сырнойседмицы)."},
+    {feodor_tir              ,"Вмч. Феодора Тирона (ок. 306) (переходящее празднование в субботу 1-й седмицы Великого поста)."},
+    {grigor_palam            ,"Свт. Григория Паламы, архиеп. Фессалонитского (переходящее празднование во 2-ю Неделю Великого поста)."},
+    {ioann_lestv             ,"Прп. Иоанна Лествичника (переходящее празднование в 4-ю Неделю Великого поста)."},
+    {mari_egipt              ,"Прп. Марии Египетской (переходящее празднование в 5-ю Неделю Великого поста)."},
+    {prep_dav_gar            ,"Преподобномучеников отцов Давидо-Гареджийских (1616) (Груз.)(переходящее празднование во вторник Светлой седмицы)."},
+    {hristodul               ,"Мчч. Христодула и Анастасии Патрских, убиенных в Ахаии (1821) (переходящее празднование вовторник Светлой седмицы)."},
+    {iosif_arimaf            ,"праведных Иосифа Аримафейского и Никодима (переходящее празднование в Неделю 3-ю по Пасхе)."},
+    {tamar_gruz              ,"Блгв. Тамары, царицы Грузинской (переходящее празднование в Неделю мироносиц)."},
+    {pm_avraam_bolg          ,"Перенесение мощей мч. Авраамия Бо'лгарского (1230)(переходящее празднование в Неделю 4-ю по Пасхе)."},
+    {tavif                   ,"Прав. Тавифы (I)(переходящее празднование в Неделю 4-ю по Пасхе)."},
+    {much_fereidan           ,"Мучеников, в долине Ферейдан (Иран) от персов пострадавших (XVII) (Груз.) (переходящее празднование в день ВознесенияГосподня)."},
+    {dodo_gar                ,"Прп. Додо Гареджийского (Груз.)(623) (переходящее празднование в среду по Вознесении)."},
+    {david_gar               ,"Прп. Давида Гареджийского (Груз.)(VI) (переходящее празднование в четверг по Вознесении)."},
+    {prep_otec_afon          ,"Всех преподобных и богоносных отцов, во Святой Горе Афонской просиявших (переходящее празднование в Неделю 2-ю по Пятидесятнице)."},
+    {prep_sokolovsk          ,"Прпп. Тихона, Василия и Никона Соколовских(XVI) (переходящее празднование в 1-е воскресенье после 29 июня)."},
+    {arsen_tversk            ,"Свт.Арсения, еп. Тверского (переходящее празднование в 1-е воскресенье после 29июня)."},
+    {much_lipsiisk           ,"Прмчч. Неофита, Ионы, Неофита, Ионы и Парфения Липсийских (переходящее празднование в 1-е воскресенье после 27 июня)."},
+    {sub_porojdestve_r       ,"Чтения субботы по Рождестве Христовом."},
+    {ned_porojdestve_r       ,"Чтения недели по Рождестве Христовом."}
   };
   auto get_dn_str = [](int8_t d) -> std::string {
     std::string s{};
