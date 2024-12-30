@@ -1906,86 +1906,66 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   add_markers_for_date_(dd, {vel_post_d5n7, post_vel});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {vel_post_d6n7, post_vel});
-  //Суббота пред Богоявлением (в конце года) (типикон стр.380)
+  // Суббота по Рождестве (типикон стр.380)
   i = get_dn_(make_pair(12,25));
-  if(i==0) add_marker_for_date_(make_pair(12,31), sub_peredbogoyav);
-  if(i==1) add_marker_for_date_(make_pair(12,30), sub_peredbogoyav);
-  //Суббота+воскресение после рождества
   switch(i) {
-    case 6: {}
-    case 0: {
-      dd = make_pair(12,31);
-      switch(get_dn_(dd)) {
-        case 6: { add_marker_for_date_(dd, sub_porojdestve); } break;
-        default: { add_marker_for_date_(dd, sub_porojdestve_r); }
-      };
-      dd = make_pair(12,26);
-      switch(get_dn_(dd)) {
-        case 0: { add_marker_for_date_(dd, ned_porojdestve); } break;
-        default: { add_marker_for_date_(dd, ned_porojdestve_r); }
-      };
-    }
-    break;
-    case 1: {
-      add_marker_for_date_(make_pair(12,30), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,31), ned_porojdestve);
-    }
-    break;
-    case 2: {
-      add_marker_for_date_(make_pair(12,29), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,30), ned_porojdestve);
-    }
-    break;
-    case 3: {
-      add_marker_for_date_(make_pair(12,28), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,29), ned_porojdestve);
-    }
-    break;
-    case 4: {
-      add_marker_for_date_(make_pair(12,27), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,28), ned_porojdestve);
-    }
-    break;
-    case 5: {
-      add_marker_for_date_(make_pair(12,26), sub_porojdestve);
-      add_marker_for_date_(make_pair(12,27), ned_porojdestve);
-    }
-    break;
-    default: {}
+    case 1: { dd = make_pair(12,30); } break;
+    case 2: { dd = make_pair(12,29); } break;
+    case 3: { dd = make_pair(12,28); } break;
+    case 4: { dd = make_pair(12,27); } break;
+    case 5: { dd = make_pair(12,26); } break;
+    default: { dd = make_pair(12,31); }
   };
-  //Суббота пред Богоявлением u неделя пред Богоявлением (в начале года)
-  switch( get_dn_prev_year(make_pair(12,25)) ) {
-    case 2: {
-      add_marker_for_date_(make_pair(1,5), sub_peredbogoyav);
-      add_marker_for_date_(make_pair(1,1), ned_peredbogoyav);
-    }
-    break;
-    case 1: { }
-    case 0: {
-      add_marker_for_date_(make_pair(1,1), ned_peredbogoyav);
-    }
-    break;
-    case 3: {
-      add_marker_for_date_(make_pair(1,4), sub_peredbogoyav);
-      add_marker_for_date_(make_pair(1,5), ned_peredbogoyav);
-    }
-    break;
-    case 4: {
-      add_marker_for_date_(make_pair(1,3), sub_peredbogoyav);
-      add_marker_for_date_(make_pair(1,4), ned_peredbogoyav);
-    }
-    break;
-    case 5: {
-      add_marker_for_date_(make_pair(1,2), sub_peredbogoyav);
-      add_marker_for_date_(make_pair(1,3), ned_peredbogoyav);
-    }
-    break;
-    case 6: {
-      add_marker_for_date_(make_pair(1,1), sub_peredbogoyav);
-      add_marker_for_date_(make_pair(1,2), ned_peredbogoyav);
-    }
-    break;
-    default: {}
+  switch(get_dn_(dd)) {
+    case 6: { add_marker_for_date_(dd, sub_porojdestve); } break;
+    default: { add_marker_for_date_(dd, sub_porojdestve_r); }
+  };
+  // неделя по Рождестве (типикон стр.380)
+  switch(i) {
+    case 1: { dd = make_pair(12,31); } break;
+    case 2: { dd = make_pair(12,30); } break;
+    case 3: { dd = make_pair(12,29); } break;
+    case 4: { dd = make_pair(12,28); } break;
+    case 5: { dd = make_pair(12,27); } break;
+    default: { dd = make_pair(12,26); }
+  };
+  switch(get_dn_(dd)) {
+    case 0: { add_marker_for_date_(dd, ned_porojdestve); } break;
+    default: { add_marker_for_date_(dd, ned_porojdestve_r); }
+  };
+  // Суббота пред Богоявлением (типикон стр.380)
+  if(i==0 || i==1) {
+  	dd = i==1 ? make_pair(12,30) : make_pair(12,31) ;
+		switch(get_dn_(dd)) {
+    	case 6: { add_marker_for_date_(dd, sub_peredbogoyav); } break;
+    	default: { add_marker_for_date_(dd, sub_peredbogoyav_r); }
+  	};
+  }
+	i = get_dn_prev_year(make_pair(12,25)) ;
+	if(!(i==0 || i==1)) {
+  	switch(i) {
+    	case 2: { dd = make_pair(1,5); } break;
+    	case 3: { dd = make_pair(1,4); } break;
+    	case 4: { dd = make_pair(1,3); } break;
+    	case 5: { dd = make_pair(1,2); } break;
+    	default: { dd = make_pair(1,1); }
+  	};
+  	switch(get_dn_(dd)) {
+    	case 6: { add_marker_for_date_(dd, sub_peredbogoyav); } break;
+    	default: { add_marker_for_date_(dd, sub_peredbogoyav_r); }
+  	};
+	}
+	// неделя пред Богоявлением (типикон стр.380)
+  switch(i) {
+    case 3: { dd = make_pair(1,5); } break;
+    case 4: { dd = make_pair(1,4); } break;
+    case 5: { dd = make_pair(1,3); } break;
+    case 6: { dd = make_pair(1,2); } break;
+    default: { dd = make_pair(1,1); }
+  };
+  switch(get_dn_(dd)) {
+    case 0: { add_marker_for_date_(dd, ned_peredbogoyav); } break;
+    default: { add_marker_for_date_(dd, ned_peredbogoyav_r); }
   };
   //Суббота пo Богоявление
   dd = make_pair(1,7);
@@ -3075,7 +3055,9 @@ std::string OrthYear::get_description_forday(int8_t month, int8_t day) const
     {arsen_tversk            ,"Свт.Арсения, еп. Тверского (переходящее празднование в 1-е воскресенье после 29июня)."},
     {much_lipsiisk           ,"Прмчч. Неофита, Ионы, Неофита, Ионы и Парфения Липсийских (переходящее празднование в 1-е воскресенье после 27 июня)."},
     {sub_porojdestve_r       ,"Чтения субботы по Рождестве Христовом."},
-    {ned_porojdestve_r       ,"Чтения недели по Рождестве Христовом."}
+    {ned_porojdestve_r       ,"Чтения недели по Рождестве Христовом."},
+		{sub_peredbogoyav_r      ,"Чтения субботы пред Богоявлением."},
+		{ned_peredbogoyav_r      ,"Чтения недели пред Богоявлением."}
   };
   auto get_dn_str = [](int8_t d) -> std::string {
     std::string s{};
