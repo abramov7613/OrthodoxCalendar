@@ -65,6 +65,7 @@ constexpr auto MIN_YEAR_VALUE = 2;            ///< допустимый мини
   *  \param [in] fmt выбор типа календаря для вычислений
   */
 bool is_leap_year(const Year& y, const CalendarFormat fmt);
+
 /**
   *  Функция возвращает кол-во дней в месяце
   *
@@ -74,19 +75,68 @@ bool is_leap_year(const Year& y, const CalendarFormat fmt);
 Day month_length(const Month month, const bool leap);
 
 /**
- * Класс даты
+ * Класс даты. Реализует преобразования между 3-мя календарными системами (григорианский, юлианский, ново-юлианский)
+ * по методу проф. Льюиса Штрауса - https://aa.quae.nl/en/reken/juliaansedag.html
+ * Для числа года используется строковое представление. Любой метод принимающий число года,
+ * бросает исключение если строку невозможно преобразовать в целое число произвольной величины
+ * или если число < MIN_YEAR_VALUE.
  */
 class Date {
   class impl;
   std::unique_ptr<impl> pimpl;
 public:
+  /**
+    *  Возвращает название месяца
+    *
+    *  \param [in] m число месяца (1 - январь, 2 - февраль и т.д.)
+    *  \param [in] rp название в род. падеже
+    */
   static std::string month_name(Month m, bool rp=true);
+  /**
+    *  Возвращает сокращенное название месяца
+    *
+    *  \param [in] m число месяца (1 - январь, 2 - февраль и т.д.)
+    */
   static std::string month_short_name(Month m);
+  /**
+    *  Возвращает название дня недели
+    *
+    *  \param [in] w число дня недели (0-вс, 1-пн, 2-вт ...)
+    */
   static std::string weekday_name(Weekday w);
+  /**
+    *  Возвращает сокращенное название дня недели
+    *
+    *  \param [in] w число дня недели (0-вс, 1-пн, 2-вт ...)
+    */
   static std::string weekday_short_name(Weekday w);
+  /**
+   *  Проверка даты на корректность
+   *
+   *  \param [in] y число года
+   *  \param [in] m число месяца
+   *  \param [in] d число дня
+   *  \param [in] fmt тип календаря для даты
+   */
   static bool check(const Year& y, const Month m, const Day d, const CalendarFormat fmt=Julian);
+  /**
+    *  Конструктор
+    */
   Date();
+  /**
+    *  Конструктор
+    *
+    *  \param [in] y число года
+    *  \param [in] m число месяца
+    *  \param [in] d число дня
+    *  \param [in] fmt тип календаря для вх. даты
+    */
   Date(const Year& y, const Month m, const Day d, const CalendarFormat fmt=Julian);
+  /**
+    *  Конструктор
+    *
+    *  \param [in] cjdn значение Chronological Julian Day Number
+    */
   Date(const std::string& cjdn);
   Date(const Date&);
   Date& operator=(const Date&);
@@ -99,77 +149,114 @@ public:
   bool operator<=(const Date&) const;
   bool operator>(const Date&) const;
   bool operator>=(const Date&) const;
+  /**
+    *  Возвращает true если объект не содержит корректной даты
+    */
   bool empty() const;
+  /**
+    *  Возвращает true если объект содержит корректную дату
+    */
   bool is_valid() const;
   explicit operator bool() const;
-  Year year(const CalendarFormat fmt=Julian) const;
-  Month month(const CalendarFormat fmt=Julian) const;
-  Day day(const CalendarFormat fmt=Julian) const;
   /**
-   *  Возвращает день недели для даты. 0-вс, 1-пн, 2-вт, 3-ср, 4-чт, 5-пт, 6-сб.
-   */
+    *  Извлекает значение года из даты для определенного типа календаря
+    *
+    *  \param [in] fmt тип календаря
+    */
+  Year year(const CalendarFormat fmt=Julian) const;
+  /**
+    *  Извлекает значение месяца из даты для определенного типа календаря
+    *
+    *  \param [in] fmt тип календаря
+    */
+  Month month(const CalendarFormat fmt=Julian) const;
+  /**
+    *  Извлекает число дня (в месяце) для определенного типа календаря
+    *
+    *  \param [in] fmt тип календаря
+    */
+  Day day(const CalendarFormat fmt=Julian) const;
+   /**
+    *  Извлекает день недели для даты. 0-вс, 1-пн, 2-вт, 3-ср, 4-чт, 5-пт, 6-сб.
+    */
   Weekday weekday() const;
+  /**
+    *  Извлекает дату по типу календаря, в формате std::tuple
+    *
+    *  \param [in] fmt тип календаря
+    */
   std::tuple<Year, Month, Day> ymd(const CalendarFormat fmt=Julian) const;
+  /**
+    *  Извлекает значение CjDN (Chronological Julian Day Number) для даты.
+    */
   std::string cjdn() const;
+  /**
+    *  Возвращает новую дату, увеличенную на кол-во дней от текущей
+    *
+    *  \param [in] c кол-во дней
+    */
   Date inc_by_days(unsigned long long c=1) const;
+  /**
+    *  Возвращает новую дату, уменьшенную на кол-во дней от текущей
+    *
+    *  \param [in] c кол-во дней
+    */
   Date dec_by_days(unsigned long long c=1) const;
+  /**
+    *  Обновляет значение даты
+    *
+    *  \param [in] y число года
+    *  \param [in] m число месяца
+    *  \param [in] d число дня
+    *  \param [in] fmt тип календаря для вх. даты
+    */
   Date& reset(const Year& y, const Month m, const Day d, const CalendarFormat fmt=Julian);
   /**
-   *  Return string representation of the stored date.
-   *  The optional parameter may contain the following format specifiers:
-   *    %%% - A literal percent sign (%)
-   *    %JY - year number in julian calendar
-   *    %GY - year number in grigorian calendar
-   *    %MY - year number in milankovic calendar
-   *    %Jq - number of month in julian calendar
-   *    %Gq - number of month in grigorian calendar
-   *    %Mq - number of month in milankovic calendar
-   *    %JQ - number of month in julian calendar two digits format
-   *    %GQ - number of month in grigorian calendar two digits format
-   *    %MQ - number of month in milankovic calendar two digits format
-   *    %Jd - day number in julian calendar
-   *    %Gd - day number in grigorian calendar
-   *    %Md - day number in milankovic calendar
-   *    %Jy - last two digits of the year number in julian calendar
-   *    %Gy - last two digits of the year number in grigorian calendar
-   *    %My - last two digits of the year number in milankovic calendar
-   *    %JM - full name of month in julian calendar
-   *    %GM - full name of month in grigorian calendar
-   *    %MM - full name of month in milankovic calendar
-   *    %JF - full name of month in julian calendar (from 1-st face)
-   *    %GF - full name of month in grigorian calendar (from 1-st face)
-   *    %MF - full name of month in milankovic calendar (from 1-st face)
-   *    %Jm - short name of month in julian calendar
-   *    %Gm - short name of month in grigorian calendar
-   *    %Mm - short name of month in milankovic calendar
-   *    %JD - day number in julian calendar in two digits format
-   *    %GD - day number in grigorian calendar in two digits format
-   *    %MD - day number in milankovic calendar in two digits format
-   *    %wd - number of date weekday (sunday=0; monday=1 ...)
-   *    %WD - full name of the date weekday
-   *    %Wd - short name of date weekday
-   *  Each specifier must contain two symbols, except percent.
+   *  Return string representation of the stored date.<br>
+   *  The optional parameter may contain the following format specifiers:<br><ul>
+   *    <li>%%% - A literal percent sign (%)
+   *    <li>%JY - year number in julian calendar
+   *    <li>%GY - year number in grigorian calendar
+   *    <li>%MY - year number in milankovic calendar
+   *    <li>%Jq - number of month in julian calendar
+   *    <li>%Gq - number of month in grigorian calendar
+   *    <li>%Mq - number of month in milankovic calendar
+   *    <li>%JQ - number of month in julian calendar two digits format
+   *    <li>%GQ - number of month in grigorian calendar two digits format
+   *    <li>%MQ - number of month in milankovic calendar two digits format
+   *    <li>%Jd - day number in julian calendar
+   *    <li>%Gd - day number in grigorian calendar
+   *    <li>%Md - day number in milankovic calendar
+   *    <li>%Jy - last two digits of the year number in julian calendar
+   *    <li>%Gy - last two digits of the year number in grigorian calendar
+   *    <li>%My - last two digits of the year number in milankovic calendar
+   *    <li>%JM - full name of month in julian calendar
+   *    <li>%GM - full name of month in grigorian calendar
+   *    <li>%MM - full name of month in milankovic calendar
+   *    <li>%JF - full name of month in julian calendar (from 1-st face)
+   *    <li>%GF - full name of month in grigorian calendar (from 1-st face)
+   *    <li>%MF - full name of month in milankovic calendar (from 1-st face)
+   *    <li>%Jm - short name of month in julian calendar
+   *    <li>%Gm - short name of month in grigorian calendar
+   *    <li>%Mm - short name of month in milankovic calendar
+   *    <li>%JD - day number in julian calendar in two digits format
+   *    <li>%GD - day number in grigorian calendar in two digits format
+   *    <li>%MD - day number in milankovic calendar in two digits format
+   *    <li>%wd - number of date weekday (sunday=0; monday=1 ...)
+   *    <li>%WD - full name of the date weekday
+   *    <li>%Wd - short name of date weekday</ul><br>
+   *  Each specifier must contain two symbols, except percent.<br>
    *  Unknown format specifiers will be ignored and copied to the output as-is.
    */
   std::string format(std::string fmt = "%Jd %JM %JY г.") const;
 };
 
 /**
- * Класс для работы с церковным календарем. Реализация использует std::string
- * и библиотеку boost::multiprecision для задания числа года в датах, что дает
- * возможность работать в неограниченно широком диапазоне, но замедляет работу
- * при вычислении очень больших дат. Поэтому все вычисления кэшируются внутри
- * объекта класса. Любой метод принимающий const std::string& для числа года,
- * бросает исключение если строку невозможно преобразовать в большое целое
- * (boost::multiprecision::cpp_int) или если число < 2. Для календарных вычислений
- * в пределах года - каждая дата может иметь набор свойств (признаков), определенных
+ * Класс для работы с церковным календарем. Для удобства поиска и календарных вычислений
+ * каждая дата может иметь набор свойств (признаков), определенных
  * константами типа oxc_const (полный список см. в разделе группы). Также предусмотрена
- * возможность установить номера седмиц для расчета отступок / преступок рядовых литургийных
- * чтений (по умолчанию вычисления производится в соответствии с оф. календарем МП РПЦ),
- * соответствующие методы сбрасывают внутренний кэш объекта класса. Методы для перевода
- * даты из юлианской в григорианскую и обратно не ограничены максимумом, но следует
- * помнить что для больших величин разница может составлять несколько месяцев, а для
- * очень больших - несколько лет.
+ * возможность настроить номера седмиц для расчета отступок / преступок рядовых литургийных
+ * чтений (по умолчанию вычисления производится в соответствии с оф. календарем МП РПЦ).
  */
 class OrthodoxCalendar {
   class impl;
@@ -244,19 +331,19 @@ public:
    */
   int8_t spring_indent(const Year& year) const;
   /**
-   *  Метод вычисляет длительность петрова поста в днях.
+   *  Метод вычисляет длительность петрова поста в днях (значения от 8 до 42)
    *
    *  \param [in] year число года юлианского календаря
    */
   int8_t apostol_post_length(const Year& year) const;
   /**
-   *  Метод вычисляет глас для указанной даты
+   *  Метод вычисляет глас для указанной даты (значения от 1 до 8. для периода от
+   *  суб.лазаревой до недели всех святых: значение < 1)
    *
    *  \param [in] y число года
    *  \param [in] m число месяца
    *  \param [in] d число дня
    *  \param [in] infmt тип календаря для даты
-   *  \return значения от 1 до 8. для периода от суб.лазаревой до недели всех святых: значение < 1
    */
   int8_t date_glas(const Year& y, const Month m, const Day d, const CalendarFormat infmt=Julian) const;
   /**
@@ -279,8 +366,8 @@ public:
    */
   int8_t date_n50(const Date& d) const;
   /**
-   *  Метод вычисляет свойства указанной даты и возвращает массив констант
-   *  из пространства oxc:: (полный список см. в разделе группы)
+   *  Метод вычисляет свойства указанной даты и возвращает массив констант из пространства oxc::
+   *  (полный список см. в разделе группы). Возвращаемое значение может быть пустым
    *
    *  \param [in] y число года
    *  \param [in] m число месяца
@@ -301,6 +388,7 @@ public:
   std::string date_properties_title(std::span<oxc_const> properties) const;
   /**
    *  Метод вычисляет рядовые литургийные чтения Апостола указанной даты. Праздники не учитываются.
+   *  Возвращаемое значение может быть пустым
    *
    *  \param [in] y число года
    *  \param [in] m число месяца
@@ -315,6 +403,7 @@ public:
   ApostolEvangelieReadings date_apostol(const Date& d) const;
   /**
    *  Метод вычисляет рядовые литургийные чтения Евангелия указанной даты. Праздники не учитываются.
+   *  Возвращаемое значение может быть пустым
    *
    *  \param [in] y число года
    *  \param [in] m число месяца
@@ -328,7 +417,7 @@ public:
    */
   ApostolEvangelieReadings date_evangelie(const Date& d) const;
   /**
-   *  Метод вычисляет воскресные Евангелия утрени для указанной даты.
+   *  Метод вычисляет воскресные Евангелия утрени для указанной даты. Возвращаемое значение может быть пустым
    *
    *  \param [in] y число года
    *  \param [in] m число месяца
@@ -442,7 +531,7 @@ public:
   std::vector<Date> get_alldates_inperiod_withanyof(const Date& d1, const Date& d2,
         std::span<oxc_const> properties) const;
   /**
-   *  Метод возвращает описание даты.
+   *  Метод возвращает текстовое описание даты.
    *
    *  \param [in] y число года
    *  \param [in] m число месяца
