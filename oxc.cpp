@@ -40,7 +40,7 @@
 #include <set>                                             // for set
 #include <stdexcept>                                       // for runtime_error
 #include <type_traits>                                     // for enable_if<...
-#include <unordered_map>                                   // for operator==
+#include <unordered_map>                                   // for unordered_map
 
 // uncomment next line to disable assert()
 //#define NDEBUG
@@ -3778,7 +3778,7 @@ class OrthodoxCalendar::impl {
   //настройка номеров добавочных седмиц осенней отступкu литургийных чтений
   std::array<uint8_t,2> osen_otstupka;
   bool osen_otstupka_apostol; //при вычислении осенней отступкu учитывать ли апостол
-  mutable std::map<std::string, oxc::OrthYear> orthyear_cache;
+  mutable std::unordered_map<std::string, oxc::OrthYear> orthyear_cache;
 
   OrthYear& get_orthyear_obj(const std::string& year) const;
   template<typename Container>
@@ -3855,8 +3855,16 @@ OrthYear& OrthodoxCalendar::impl::get_orthyear_obj(const std::string& year) cons
   std::string indent_opts_str;
   for(const auto x: indent_opts) indent_opts_str += std::to_string(x);
   std::string key (year + indent_opts_str + std::to_string(apostol_opt));
-  auto [it, inserted] = orthyear_cache.try_emplace(key, year, indent_opts, apostol_opt);
-  return it->second;
+  if(auto x = orthyear_cache.find(key); x != orthyear_cache.end()) {
+    return x->second;
+  } else {
+    if(orthyear_cache.size() == 10000) orthyear_cache.clear();
+    auto [it, inserted] = orthyear_cache.try_emplace(key, year, indent_opts, apostol_opt);
+    if(!inserted)
+      throw std::runtime_error("ошибка создания объекта OrthYear("+year+", "+indent_opts_str+", "
+                                +std::to_string(apostol_opt)+")");
+    return it->second;
+  }
 }
 
 template<typename Container>
