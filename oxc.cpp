@@ -194,7 +194,6 @@ std::string property_title(oxc_const property)
     {s1po50_5,           "Пятница Пятидесятницы."},
     {s1po50_6,           "Суббота Пятидесятницы. Отдание праздника Пятидесятницы."},
     {ned1_po50,          "Неделя 1-я по Пятидесятнице, Всех святых."},
-    {varlaam_hut,        "Прп. Варлаа́ма Ху́тынского (переходящее празднование)."},
     {ned2_po50,          "Неделя 2-я по Пятидесятнице, Всех святых, в земле Русской просиявших."},
     {ned3_po50,          "Неделя 3-я по Пятидесятнице."},
     {ned4_po50,          "Неделя 4-я по Пятидесятнице."},
@@ -410,8 +409,11 @@ std::string property_title(oxc_const property)
     { mari_icon_21,               "иконы Божией Матери «Табынская»"},
     { mari_icon_22,               "иконы Божией Матери «Умягчение Злых Сердец»"},
     { mari_icon_23,               "иконы Божией Матери «Умиление Псковско-Печерская»"},
+    { mari_icon_24,               "иконы Божией Матери «Касперовская»"},
+    { mari_icon_25,               "иконы Божией Матери «Челнская»"},
   //таблица - группа констант 7 - переходящие дни празднования святых
     { sobor_valaam,            "Собо́р преподо́бных отце́в, на Валаа́ме просия́вших."},
+    { varlaam_hut,             "Прп. Варлаа́ма Ху́тынского (переходящее празднование)."},
     { petr_fevron_murom,       "Перенесение мощей блгвв. кн. Петра, в иночестве Давида, и кн. Февронии, в иночестве Евфросинии, Муромских чудотворцев."},
     { sobor_bessrebren,        "Собор всех Бессребреников."},
     { sobor_tversk,            "Собор Тверских святых."},
@@ -2425,13 +2427,13 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {svetlaya1, full7_pasha});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {svetlaya2, full7_pasha, prep_dav_gar, hristodul});
+  add_markers_for_date_(dd, {svetlaya2, full7_pasha, mari_icon_09, mari_icon_17, prep_dav_gar, hristodul});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {svetlaya3, full7_pasha});
+  add_markers_for_date_(dd, {svetlaya3, full7_pasha, mari_icon_24});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {svetlaya4, full7_pasha});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {svetlaya5, full7_pasha});
+  add_markers_for_date_(dd, {svetlaya5, full7_pasha, mari_icon_06});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {svetlaya6, full7_pasha});
   dd = increment_date_(dd, 1, b);
@@ -2469,7 +2471,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_marker_for_date_(dd, s4popashe_2);
   dd = increment_date_(dd, 1, b);
-  add_marker_for_date_(dd, s4popashe_3);
+  add_markers_for_date_(dd, {s4popashe_3, mari_icon_04, mari_icon_14});
   dd = increment_date_(dd, 1, b);
   add_marker_for_date_(dd, s4popashe_4);
   dd = increment_date_(dd, 1, b);
@@ -2495,7 +2497,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_marker_for_date_(dd, s6popashe_1);
   dd = increment_date_(dd, 1, b);
-  add_marker_for_date_(dd, s6popashe_2);
+  add_markers_for_date_(dd, {s6popashe_2, mari_icon_07});
   dd = increment_date_(dd, 1, b);
   add_marker_for_date_(dd, s6popashe_3);
   dd = increment_date_(dd, 1, b);
@@ -2505,7 +2507,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_marker_for_date_(dd, s6popashe_6);
   dd = increment_date_(dd, 1, b);
-  add_marker_for_date_(dd, ned7_popashe);
+  add_markers_for_date_(dd, {ned7_popashe, mari_icon_23, mari_icon_25});
   dd = increment_date_(dd, 1, b);
   add_marker_for_date_(dd, s7popashe_1);
   dd = increment_date_(dd, 1, b);
@@ -2521,25 +2523,28 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {ned8_popashe, full7_troica});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {s1po50_1, full7_troica});
+  add_markers_for_date_(dd, {s1po50_1, full7_troica, mari_icon_12, mari_icon_20});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {s1po50_2, full7_troica});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {s1po50_3, full7_troica});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {s1po50_4, full7_troica});
+  add_markers_for_date_(dd, {s1po50_4, full7_troica, mari_icon_19});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {s1po50_5, full7_troica});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {s1po50_6, full7_troica});
   dd = increment_date_(dd, 1, b);
-  add_marker_for_date_(dd, ned1_po50);
+  add_markers_for_date_(dd, {ned1_po50, mari_icon_22, mari_icon_10, mari_icon_05, mari_icon_16});
   for( auto x=increment_date_(dd,1,b), y=make_pair(6,29); x<y; x=increment_date_(x,1,b) ) {
     add_marker_for_date_(x, post_petr);
   }
+  //четверг 2-й седмицы по Пятидесятнице
+  dd = increment_date_(dd, 4, b);
+  add_marker_for_date_(dd, mari_icon_15);
   //1-я пятница Петрова поста - Прп. Варлаама Хутынского
-  dd = increment_date_(dd, 5, b);
-  add_marker_for_date_(dd, varlaam_hut);
+  dd = increment_date_(dd, 1, b);
+  add_markers_for_date_(dd, {varlaam_hut, mari_icon_08, mari_icon_21});
   //всех святых, в земле Русской просиявших
   dd = increment_date_(dd, 2, b);
   add_markers_for_date_(dd, {ned2_po50, prep_otec_afon});
@@ -2555,6 +2560,29 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
     i = get_dn_(dd);
     if(i==0) {
       add_marker_for_date_(dd, sobor_valaam);
+      break;
+    }
+    dd = increment_date_(dd, 1, b);
+  } while (true);
+  //празники на 29 или 28 февраля
+  dd = b ? make_pair(2,29) : make_pair(2,28) ;
+  add_marker_for_date_(dd, mari_icon_03);
+  //иконы Божией Матери «Казанская Коробейниковская»
+  dd = make_pair(6,18);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, mari_icon_13);
+      break;
+    }
+    dd = increment_date_(dd, 1, b);
+  } while (true);
+  //иконы Божией Матери Прибавление Ума
+  dd = make_pair(8,16);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, mari_icon_18);
       break;
     }
     dd = increment_date_(dd, 1, b);
@@ -2767,7 +2795,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {vel_post_d6n1, post_vel, feodor_tir});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {vel_post_d0n2, post_vel});
+  add_markers_for_date_(dd, {vel_post_d0n2, post_vel, mari_icon_11});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {vel_post_d1n2, post_vel});
   dd = increment_date_(dd, 1, b);
@@ -2821,7 +2849,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {vel_post_d5n5, post_vel});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {vel_post_d6n5, post_vel});
+  add_markers_for_date_(dd, {vel_post_d6n5, post_vel, mari_icon_01, mari_icon_02});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {vel_post_d0n6, post_vel, mari_egipt});
   dd = increment_date_(dd, 1, b);
