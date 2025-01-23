@@ -50,7 +50,7 @@
 /*                  CONSTANTS                   */
 /*----------------------------------------------*/
 
-constexpr auto M_COUNT = 8;// day_markers array size
+constexpr auto M_COUNT = 12;// day_markers array size
 const char* invalid_date = "ошибка определения даты";
 
 /*----------------------------------------------*/
@@ -417,7 +417,7 @@ std::string property_title(oxc_const property)
     { petr_fevron_murom,       "Перенесение мощей блгвв. кн. Петра, в иночестве Давида, и кн. Февронии, в иночестве Евфросинии, Муромских чудотворцев."},
     { sobor_bessrebren,        "Собор всех Бессребреников."},
     { sobor_tversk,            "Собор Тверских святых."},
-    { sobor_kemero,            "Собор Кемеровских святых."},
+    { sobor_kuzbas,            "Собор Кузбасских святых."},
     { pahomii_kensk,           "Прп. Пахомия Кенского (XVI) (переходящее празднование)."},
     { shio_mg,                 "Прп.Шио Мгвимского (VI) (Груз.) (переходящее празднование)."},
     { prep_dav_gar,            "Преподобномучеников отцов Давидо-Гареджийских (1616) (Груз.)(переходящее празднование)."},
@@ -429,7 +429,6 @@ std::string property_title(oxc_const property)
     { much_fereidan,           "Мучеников, в долине Ферейдан (Иран) от персов пострадавших (XVII) (Груз.) (переходящее празднование)."},
     { dodo_gar,                "Прп. Додо Гареджийского (Груз.)(623) (переходящее празднование)."},
     { david_gar,               "Прп. Давида Гареджийского (Груз.)(VI) (переходящее празднование)."},
-    { prep_otec_afon,          "Всех преподобных и богоносных отцов, во Святой Горе Афонской просиявших (переходящее празднование)."},
     { prep_sokolovsk,          "Прпп. Тихона, Василия и Никона Соколовских(XVI) (переходящее празднование)."},
     { arsen_tversk,            "Свт.Арсения, еп. Тверского (переходящее празднование)."},
     { much_lipsiisk,           "Прмчч. Неофита, Ионы, Неофита, Ионы и Парфения Липсийских (переходящее празднование)."},
@@ -454,10 +453,12 @@ std::string property_title(oxc_const property)
     { sobor_perm,              "Собор святых Пермской митрополии"},
     { sobor_ppech_prep,        "Собор преподобных отцов Псково-Печерских"},
     { sobor_sinai_prep,        "Собор преподобных отцов, на Богошественной Горе Синай подвизавшихся"},
-    { sobor_tambov,            "Собор святых Тамбовской митрополии"},
     { sobor_much_holm,         "Собор мучеников Холмских и Подляшских"},
     { sobor_vseh_prep,         "Собор всех преподобных отцов, в подвиге просиявших"},
-    { sobor_kpech_prep,        "Собор всех преподобных отцов Киево-Печерских"}
+    { sobor_kpech_prep,        "Собор всех преподобных отцов Киево-Печерских"},
+    { sobor_smolensk,          "Собор Смоленских святых"},
+    { sobor_alansk,            "Собор Аланских святых"},
+    { sobor_german,            "Собор святых, в земле Германской просиявших"}
   };
   if(auto x = table.find(property); x!=table.end()) return std::string(x->second);
   return {};
@@ -2429,7 +2430,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {svetlaya2, full7_pasha, mari_icon_09, mari_icon_17, prep_dav_gar, hristodul});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {svetlaya3, full7_pasha, mari_icon_24});
+  add_markers_for_date_(dd, {svetlaya3, full7_pasha, mari_icon_24, sobor_sinai_prep});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {svetlaya4, full7_pasha});
   dd = increment_date_(dd, 1, b);
@@ -2477,7 +2478,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_marker_for_date_(dd, s4popashe_5);
   dd = increment_date_(dd, 1, b);
-  add_marker_for_date_(dd, s4popashe_6);
+  add_markers_for_date_(dd, {s4popashe_6, sobor_butov});
   dd = increment_date_(dd, 1, b);
   add_marker_for_date_(dd, ned5_popashe);
   dd = increment_date_(dd, 1, b);
@@ -2547,13 +2548,14 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   add_markers_for_date_(dd, {varlaam_hut, mari_icon_08, mari_icon_21});
   //всех святых, в земле Русской просиявших
   dd = increment_date_(dd, 2, b);
-  add_markers_for_date_(dd, {ned2_po50, prep_otec_afon});
-  //всех мучеников по взятии Царяграда пострадавших
+  add_markers_for_date_(dd, {ned2_po50, sobor_afonpr});
+  //Собор Белорусских, Вологодских, Новгородских, Псковских , Петербургских, Удмуртских, Волгоградских святых
   dd = increment_date_(dd, 7, b);
-  add_marker_for_date_(dd, ned3_po50);
-  //дня преподобных отцов Псково-Печерских
+  add_markers_for_date_(dd, {ned3_po50, sobor_belorus, sobor_vologod,
+                              sobor_novgorod, sobor_pskov, sobor_piter, sobor_udmurt, sobor_volgograd});
+  //Неделя 4-я по Пятидесятнице. дня преподобных отцов Псково-Печерских
   dd = increment_date_(dd, 7, b);
-  add_marker_for_date_(dd, ned4_po50);
+  add_markers_for_date_(dd, {ned4_po50, sobor_ppech_prep});
   //Соборa Валаамских святых
   dd = make_pair(8,7);
   do {
@@ -2587,12 +2589,224 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
     }
     dd = increment_date_(dd, 1, b);
   } while (true);
+  //Собор святых Челябинской митрополии (воскресенье после 27 сентября);
+  //    Празднование совершается: 27 сентября, если это воскресный день; в воскресенье перед 27 сентября,
+  //      если на воскресенье после 27 сентября приходится праздник Покрова Божией Матери.
+  dd = make_pair(9,27);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      if(dd!=make_pair(10,1)) {
+        add_marker_for_date_(dd, sobor_chelyab);
+      } else {
+        dd = make_pair(9,26);
+        do {
+          i = get_dn_(dd);
+          if(i==0) {
+            add_marker_for_date_(dd, sobor_chelyab);
+            break;
+          }
+          dd = decrement_date_(dd, 1, b);
+        } while (true);
+      }
+      break;
+    }
+    dd = increment_date_(dd, 1, b);
+  } while (true);
+  //Собор новомучеников и исповедников Казахстанских
+  dd = make_pair(9,3);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, sobor_kazahst);
+      break;
+    }
+    dd = increment_date_(dd, 1, b);
+  } while (true);
+  //Собор новомучеников и исповедников земли Карельской
+  dd = make_pair(10,18);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, sobor_karel);
+      break;
+    }
+    dd = increment_date_(dd, 1, b);
+  } while (true);
+  //Собор святых Пермской митрополии
+  dd = make_pair(1,29);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, sobor_perm);
+      break;
+    }
+    dd = increment_date_(dd, 1, b);
+  } while (true);
+  //Собор Московских святых
+  dd = make_pair(8,25);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, sobor_mosk);
+      break;
+    }
+    dd = decrement_date_(dd, 1, b);
+  } while (true);
+  //Собор Смоленских святых
+  dd = make_pair(7,27);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, sobor_smolensk);
+      break;
+    }
+    dd = decrement_date_(dd, 1, b);
+  } while (true);
+  //Собор святых Нижегородской митрополии
+  dd = make_pair(8,26);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, sobor_nnovgor);
+      break;
+    }
+    dd = increment_date_(dd, 1, b);
+  } while (true);
+  //Собор мучеников Холмских и Подляшских
+  dd = make_pair(5,19);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, sobor_much_holm);
+      break;
+    }
+    dd = increment_date_(dd, 1, b);
+  } while (true);
+  //Собор Саратовских святых (ближайшее воскресенье к Ав. 31)
+  dd = make_pair(8,31);
+  i = get_dn_(dd);
+  switch (i) {
+    case 0: {
+      add_marker_for_date_(dd, sobor_saratov);
+    }
+    break;
+    case 1: {}
+    case 2: {}
+    case 3: {
+      do {
+        dd = decrement_date_(dd, 1, b);
+        i = get_dn_(dd);
+        if(i==0) {
+          add_marker_for_date_(dd, sobor_saratov);
+          break;
+        }
+      } while(true);
+    }
+    break;
+    case 4: {}
+    case 5: {}
+    case 6: {
+      do {
+        dd = increment_date_(dd, 1, b);
+        i = get_dn_(dd);
+        if(i==0) {
+          add_marker_for_date_(dd, sobor_saratov);
+          break;
+        }
+      } while(true);
+    }
+    break;
+    default: {}
+  };
+  //Собор Аланских святых (ближайшее воскресенье к Н. 10)
+  dd = make_pair(11,10);
+  i = get_dn_(dd);
+  switch (i) {
+    case 0: {
+      add_marker_for_date_(dd, sobor_alansk);
+    }
+    break;
+    case 1: {}
+    case 2: {}
+    case 3: {
+      do {
+        dd = decrement_date_(dd, 1, b);
+        i = get_dn_(dd);
+        if(i==0) {
+          add_marker_for_date_(dd, sobor_alansk);
+          break;
+        }
+      } while(true);
+    }
+    break;
+    case 4: {}
+    case 5: {}
+    case 6: {
+      do {
+        dd = increment_date_(dd, 1, b);
+        i = get_dn_(dd);
+        if(i==0) {
+          add_marker_for_date_(dd, sobor_alansk);
+          break;
+        }
+      } while(true);
+    }
+    break;
+    default: {}
+  };
+  //Собор святых, в земле Германской просиявших (ближайшее воскресенье к C. 20)
+  dd = make_pair(9,20);
+  i = get_dn_(dd);
+  switch (i) {
+    case 0: {
+      add_marker_for_date_(dd, sobor_german);
+    }
+    break;
+    case 1: {}
+    case 2: {}
+    case 3: {
+      do {
+        dd = decrement_date_(dd, 1, b);
+        i = get_dn_(dd);
+        if(i==0) {
+          add_marker_for_date_(dd, sobor_german);
+          break;
+        }
+      } while(true);
+    }
+    break;
+    case 4: {}
+    case 5: {}
+    case 6: {
+      do {
+        dd = increment_date_(dd, 1, b);
+        i = get_dn_(dd);
+        if(i==0) {
+          add_marker_for_date_(dd, sobor_german);
+          break;
+        }
+      } while(true);
+    }
+    break;
+    default: {}
+  };
   //Перенесение мощей блгвв. кн. Петра и Февронии
   dd = make_pair(9,6);
   do {
     i = get_dn_(dd);
     if(i==0) {
       add_marker_for_date_(dd, petr_fevron_murom);
+      break;
+    }
+    dd = decrement_date_(dd, 1, b);
+  } while (true);
+  //Собор святых Кубанской митрополии; Собор святых, в земле Испанской и Португальской просиявших
+  dd = make_pair(9,28);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_markers_for_date_(dd, {sobor_kuban, sobor_ispan});
       break;
     }
     dd = decrement_date_(dd, 1, b);
@@ -2778,7 +2992,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   t3 = dd;
   add_markers_for_date_(dd, {sirnaya5, full7_sirn});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {sirnaya6, full7_sirn});
+  add_markers_for_date_(dd, {sirnaya6, full7_sirn, sobor_vseh_prep});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {ned_siropust, full7_sirn});
   dd = increment_date_(dd, 1, b);
@@ -2809,7 +3023,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {vel_post_d6n2, post_vel});
   dd = increment_date_(dd, 1, b);
-  add_markers_for_date_(dd, {vel_post_d0n3, post_vel, grigor_palam});
+  add_markers_for_date_(dd, {vel_post_d0n3, post_vel, grigor_palam, sobor_kpech_prep});
   dd = increment_date_(dd, 1, b);
   add_markers_for_date_(dd, {vel_post_d1n3, post_vel});
   dd = increment_date_(dd, 1, b);
@@ -3141,11 +3355,21 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   if(check_date_(dd, ned8_popashe)) dd = make_pair(5, 22);
   add_marker_for_date_(dd, obret_gl_ioanna3);
   //Прмчч Липсийских(переходящее празднование в 1-е воскресенье после 27 июня).
-  dd = make_pair(6, 28);
+  dd = make_pair(6, 27);
   do {
     i = get_dn_(dd);
     if(i==0) {
       add_marker_for_date_(dd, much_lipsiisk);
+      break;
+    }
+    dd = increment_date_(dd, 1, b);
+  } while (true);
+  //Собор Алтайских святых.
+  dd = make_pair(9, 7);
+  do {
+    i = get_dn_(dd);
+    if(i==0) {
+      add_marker_for_date_(dd, sobor_altai);
       break;
     }
     dd = increment_date_(dd, 1, b);
@@ -3198,12 +3422,12 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
     break;
     default: { }
   };
-  //Собор Кемеровских святых
-  dd = make_pair(8, 17);
+  //Собор Кузбасских святых (последний воскресный день августа)
+  dd = make_pair(8, 31);
   do {
     i = get_dn_(dd);
     if(i==0) {
-      add_marker_for_date_(dd, sobor_kemero);
+      add_marker_for_date_(dd, sobor_kuzbas);
       break;
     }
     dd = decrement_date_(dd, 1, b);
