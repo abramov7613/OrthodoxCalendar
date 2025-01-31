@@ -51,6 +51,8 @@
 /*----------------------------------------------*/
 
 constexpr auto M_COUNT = 12;// day_markers array size
+constexpr auto EMPTY_CJDN = -1;
+constexpr auto MIN_CJDN_VALUE = 1721791;
 const char* invalid_date = "ошибка определения даты";
 
 /*----------------------------------------------*/
@@ -469,10 +471,10 @@ std::string property_title(oxc_const property)
 /*----------------------------------------------*/
 
 class Date::impl {
-  INT cjdn_;                                                //Chronological Julian Day Number
-  mutable std::optional<std::tuple<Year,Month,Day>> gdate_; //Grigorian date
-  mutable std::optional<std::tuple<Year,Month,Day>> jdate_; //Julian date
-  mutable std::optional<std::tuple<Year,Month,Day>> mdate_; //Milankovic date
+  INT cjdn_;                         //Chronological Julian Day Number
+  std::tuple<Year,Month,Day> gdate_; //Grigorian date
+  std::tuple<Year,Month,Day> jdate_; //Julian date
+  std::tuple<Year,Month,Day> mdate_; //Milankovic date
 
   int fdiv_(int a, int b) const;
   INT fdiv_(const INT& a, const INT& b) const;
@@ -483,21 +485,17 @@ class Date::impl {
   INT grigorian2cjdn(const Year& y, const Month m, const Day d) const;
   INT julian2cjdn(const Year& y, const Month m, const Day d) const;
   INT milankovic2cjdn(const Year& y, const Month m, const Day d) const;
-  auto cjdn2grigorian(const INT& cjdn) const;
-  auto cjdn2julian(const INT& cjdn) const;
-  auto cjdn2milankovic(const INT& cjdn) const;
-  const auto& get_grigorian() const;
-  const auto& get_julian() const;
-  const auto& get_milankovic() const;
+  std::tuple<Year,Month,Day> cjdn2grigorian(const INT& cjdn) const;
+  std::tuple<Year,Month,Day> cjdn2julian(const INT& cjdn) const;
+  std::tuple<Year,Month,Day> cjdn2milankovic(const INT& cjdn) const;
 
 public:
-  static bool check(const Year& y, const Month m, const Day d, const CalendarFormat f);
   impl();
   impl(const Year& y, const Month m, const Day d, const CalendarFormat f);
-  impl(const std::string& cjdn);
-  auto& reset();
-  auto& reset(const std::string& new_cjdn);
-  auto& reset(const Year& y, const Month m, const Day d, const CalendarFormat f);
+  impl(const INT& cjdn);
+  bool reset();
+  bool reset(const Year& y, const Month m, const Day d, const CalendarFormat f);
+  bool reset(const INT& new_cjdn);
   bool operator==(const Date::impl& rhs) const;
   bool operator!=(const Date::impl& rhs) const;
   bool operator<(const Date::impl& rhs) const ;
@@ -510,78 +508,102 @@ public:
   Day day(const CalendarFormat fmt) const;
   Weekday weekday() const;
   std::tuple<Year,Month,Day> ymd(const CalendarFormat fmt) const;
-  std::string cjdn() const;
-  std::string cjdn_from_incremented_by(unsigned long long c) const;
-  std::string cjdn_from_decremented_by(unsigned long long c) const;
+  INT cjdn() const;
+  INT cjdn_from_incremented_by(unsigned long long c) const;
+  INT cjdn_from_decremented_by(unsigned long long c) const;
   std::string& format(std::string& fmt) const;
 };
 
-/*static*/bool Date::impl::check(const Year& y, const Month m, const Day d, const CalendarFormat f)
+bool Date::impl::reset()
+{
+  gdate_ = std::make_tuple<Year,Month,Day>({},{},{});
+  jdate_ = std::make_tuple<Year,Month,Day>({},{},{});
+  mdate_ = std::make_tuple<Year,Month,Day>({},{},{});
+  cjdn_ = EMPTY_CJDN;
+  return true;
+}
+
+bool Date::impl::reset(const Year& y, const Month m, const Day d, const CalendarFormat f)
 {
   if( m<1 || m>12 ) return false;
   INT x;
   try { x.assign(y); } catch(const std::exception& e) { return false; }
   if( x < MIN_YEAR_VALUE ) return false;
   if( d<1 || d > month_length(m, is_leap_year(y, f)) ) return false;
+  std::tuple<Year,Month,Day> jx, gx, mx ;
+  switch(f) {
+    case Grigorian: {
+      x = grigorian2cjdn(y, m, d);
+      gx = std::make_tuple(y, m, d);
+      jx = cjdn2julian(x);
+      mx = cjdn2milankovic(x);
+    } break;
+    case Julian: {
+      x = julian2cjdn(y, m, d);
+      jx = std::make_tuple(y, m, d);
+      gx = cjdn2grigorian(x);
+      mx = cjdn2milankovic(x);
+    } break;
+    case Milankovic: {
+      x = milankovic2cjdn(y, m, d);
+      mx = std::make_tuple(y, m, d);
+      gx = cjdn2grigorian(x);
+      jx = cjdn2julian(x);
+    } break;
+    default: { return false; }
+  }
+  INT jy ( std::get<0>(jx) );
+  INT gy ( std::get<0>(gx) );
+  INT my ( std::get<0>(mx) );
+  if( jy < MIN_YEAR_VALUE || gy < MIN_YEAR_VALUE || my < MIN_YEAR_VALUE ) return false;
+  gdate_ = gx;
+  jdate_ = jx;
+  mdate_ = mx;
+  cjdn_  = x;
   return true;
 }
 
-auto& Date::impl::reset()
+bool Date::impl::reset(const INT& new_cjdn)
 {
-  gdate_.reset();
-  jdate_.reset();
-  mdate_.reset();
-  cjdn_ = 0;
-  return *this;
-}
-
-auto& Date::impl::reset(const std::string& new_cjdn)
-{
-  cjdn_ = string_to_big_int(new_cjdn);
-  if(cjdn_ != 0 && cjdn_ < impl(std::to_string(MIN_YEAR_VALUE), 1, 1, Grigorian).cjdn_)
-      throw std::runtime_error(std::string(invalid_date) + " CjDN = " + new_cjdn);
-  gdate_.reset();
-  jdate_.reset();
-  mdate_.reset();
-  return *this;
-}
-
-auto& Date::impl::reset(const Year& y, const Month m, const Day d, const CalendarFormat f)
-{
-  if(!check(y, m, d, f))
-    throw std::runtime_error(std::string(invalid_date)+" '"+y+'.'+std::to_string(m)+'.'+std::to_string(d)+'\'');
-  reset();
-  switch(f) {
-    case Grigorian: {
-      cjdn_ = grigorian2cjdn(y, m, d);
-      gdate_ = std::make_tuple(y, m, d);
-    } break;
-    case Julian: {
-      cjdn_ = julian2cjdn(y, m, d);
-      jdate_ = std::make_tuple(y, m, d);
-    } break;
-    case Milankovic: {
-      cjdn_ = milankovic2cjdn(y, m, d);
-      mdate_ = std::make_tuple(y, m, d);
-    } break;
-    default: {}
+  if(new_cjdn == EMPTY_CJDN) {
+    cjdn_  = EMPTY_CJDN ;
+    gdate_ = std::make_tuple<Year,Month,Day>({},{},{});
+    jdate_ = std::make_tuple<Year,Month,Day>({},{},{});
+    mdate_ = std::make_tuple<Year,Month,Day>({},{},{});
+  } else {
+    if(new_cjdn < MIN_CJDN_VALUE) return false;
+    auto jx = cjdn2julian(new_cjdn);
+    INT jy ( std::get<0>(jx) );
+    if( jy < MIN_YEAR_VALUE ) return false;
+    auto gx = cjdn2grigorian(new_cjdn);
+    INT gy ( std::get<0>(gx) );
+    if( gy < MIN_YEAR_VALUE ) return false;
+    auto mx = cjdn2milankovic(new_cjdn);
+    INT my ( std::get<0>(mx) );
+    if( my < MIN_YEAR_VALUE ) return false;
+    gdate_ = gx;
+    jdate_ = jx;
+    mdate_ = mx;
+    cjdn_ = new_cjdn;
   }
-  return *this;
+  return true;
 }
 
-Date::impl::impl() :
-    cjdn_{0}, gdate_{}, jdate_{}, mdate_{}
+Date::impl::impl()
 {
+  reset();
 }
 
 Date::impl::impl(const Year& y, const Month m, const Day d, const CalendarFormat f)
 {
-  reset(y, m, d, f);
+  if(!reset(y, m, d, f))
+    throw std::runtime_error(std::string(invalid_date)+" '"+y+'.'+std::to_string(m)+'.'+std::to_string(d)+'\'');
 }
 
-Date::impl::impl(const std::string& cjdn)
+Date::impl::impl(const INT& cjdn)
 {
-  reset(cjdn);
+  if(!reset(cjdn))
+    throw std::runtime_error(std::string(invalid_date)+" : cjdn = "+cjdn.str());
 }
 
 int Date::impl::fdiv_(int a, int b) const
@@ -683,7 +705,7 @@ INT Date::impl::milankovic2cjdn(const Year& y, const Month m, const Day d) const
   return result;
 }
 
-auto Date::impl::cjdn2grigorian(const INT& cjdn) const
+std::tuple<Year,Month,Day> Date::impl::cjdn2grigorian(const INT& cjdn) const
 // Dr Louis Strous's method:
 // https://aa.quae.nl/en/reken/juliaansedag.html#3_2
 {
@@ -697,7 +719,7 @@ auto Date::impl::cjdn2grigorian(const INT& cjdn) const
   return std::make_tuple(y.str(), m, d);
 }
 
-auto Date::impl::cjdn2julian(const INT& cjdn) const
+std::tuple<Year,Month,Day> Date::impl::cjdn2julian(const INT& cjdn) const
 // Dr Louis Strous's method:
 // https://aa.quae.nl/en/reken/juliaansedag.html#5_2
 {
@@ -712,7 +734,7 @@ auto Date::impl::cjdn2julian(const INT& cjdn) const
   return std::make_tuple(y.str(), m, d);
 }
 
-auto Date::impl::cjdn2milankovic(const INT& cjdn) const
+std::tuple<Year,Month,Day> Date::impl::cjdn2milankovic(const INT& cjdn) const
 // Dr Louis Strous's method:
 // https://aa.quae.nl/en/reken/juliaansedag.html#4_2
 {
@@ -727,24 +749,6 @@ auto Date::impl::cjdn2milankovic(const INT& cjdn) const
   Month m = x1 - 12 * c0 + 3;
   Day d = fdiv_(mod_(k1, 153), 5) + 1;
   return std::make_tuple(y.str(), m, d);
-}
-
-const auto& Date::impl::get_grigorian() const
-{
-  if(!gdate_ && cjdn_>0) gdate_ = cjdn2grigorian(cjdn_);
-  return gdate_;
-}
-
-const auto& Date::impl::get_julian() const
-{
-  if(!jdate_ && cjdn_>0) jdate_ = cjdn2julian(cjdn_);
-  return jdate_;
-}
-
-const auto& Date::impl::get_milankovic() const
-{
-  if(!mdate_ && cjdn_>0) mdate_ = cjdn2milankovic(cjdn_);
-  return mdate_;
 }
 
 bool Date::impl::operator==(const Date::impl& rhs) const
@@ -779,7 +783,7 @@ bool Date::impl::operator>=(const Date::impl& rhs) const
 
 bool Date::impl::is_valid() const
 {
-  return cjdn_>0;
+  return cjdn_ != EMPTY_CJDN;
 }
 
 Year Date::impl::year(const CalendarFormat fmt) const
@@ -787,13 +791,13 @@ Year Date::impl::year(const CalendarFormat fmt) const
   Year result {};
   switch(fmt){
     case Grigorian: {
-      if(auto x=get_grigorian(); x) result = std::get<0>(x.value());
+      result = std::get<0>(gdate_);
     } break;
     case Julian: {
-      if(auto x=get_julian(); x) result = std::get<0>(x.value());
+      result = std::get<0>(jdate_);
     } break;
     case Milankovic: {
-      if(auto x=get_milankovic(); x) result = std::get<0>(x.value());
+      result = std::get<0>(mdate_);
     } break;
     default: {}
   }
@@ -805,13 +809,13 @@ Month Date::impl::month(const CalendarFormat fmt) const
   Month result {};
   switch(fmt){
     case Grigorian: {
-      if(auto x=get_grigorian(); x) result = std::get<1>(x.value());
+      result = std::get<1>(gdate_);
     } break;
     case Julian: {
-      if(auto x=get_julian(); x) result = std::get<1>(x.value());
+      result = std::get<1>(jdate_);
     } break;
     case Milankovic: {
-      if(auto x=get_milankovic(); x) result = std::get<1>(x.value());
+      result = std::get<1>(mdate_);
     } break;
     default: {}
   }
@@ -823,13 +827,13 @@ Day Date::impl::day(const CalendarFormat fmt) const
   Day result {};
   switch(fmt){
     case Grigorian: {
-      if(auto x=get_grigorian(); x) result = std::get<2>(x.value());
+      result = std::get<2>(gdate_);
     } break;
     case Julian: {
-      if(auto x=get_julian(); x) result = std::get<2>(x.value());
+      result = std::get<2>(jdate_);
     } break;
     case Milankovic: {
-      if(auto x=get_milankovic(); x) result = std::get<2>(x.value());
+      result = std::get<2>(mdate_);
     } break;
     default: {}
   }
@@ -844,60 +848,41 @@ Weekday Date::impl::weekday() const
 
 std::tuple<Year,Month,Day> Date::impl::ymd(const CalendarFormat fmt) const
 {
-  auto result = std::make_tuple<Year,Month,Day>({},{},{}) ;
   switch(fmt) {
-    case Grigorian: {
-      if(auto x=get_grigorian(); x) result = x.value();
-    } break;
-    case Julian: {
-      if(auto x=get_julian(); x) result = x.value();
-    } break;
-    case Milankovic: {
-      if(auto x=get_milankovic(); x) result = x.value();
-    } break;
-    default: {}
+    case Grigorian:  return gdate_ ;
+    case Julian:     return jdate_ ;
+    case Milankovic: return mdate_ ;
   }
-  return result;
+  return std::make_tuple<Year,Month,Day>({},{},{}) ;
 }
 
-std::string Date::impl::cjdn() const
+INT Date::impl::cjdn() const
 {
-  return cjdn_.str();
+  return cjdn_ ;
 }
 
-std::string Date::impl::cjdn_from_incremented_by(unsigned long long c) const
+INT Date::impl::cjdn_from_incremented_by(unsigned long long c) const
 {
-  INT x = cjdn_;
-  x += c;
-  return x.str();
+  return cjdn_ + c;
 }
 
-std::string Date::impl::cjdn_from_decremented_by(unsigned long long c) const
+INT Date::impl::cjdn_from_decremented_by(unsigned long long c) const
 {
-  INT x = cjdn_;
-  x -= c;
-  return x.str();
+  return cjdn_ - c;
 }
 
 std::string& Date::impl::format(std::string& fmt) const
 {
   if(fmt.size() < 3) return fmt;
-  std::string jy_, gy_, my_, jm_, gm_, mm_, jd_, gd_, md_;
-  if(auto x=get_grigorian(); x) {
-    gy_ = std::get<0>(x.value());
-    gm_ = std::to_string(std::get<1>(x.value()));
-    gd_ = std::to_string(std::get<2>(x.value()));
-  }
-  if(auto x=get_julian(); x) {
-    jy_ = std::get<0>(x.value());
-    jm_ = std::to_string(std::get<1>(x.value()));
-    jd_ = std::to_string(std::get<2>(x.value()));
-  }
-  if(auto x=get_milankovic(); x) {
-    my_ = std::get<0>(x.value());
-    mm_ = std::to_string(std::get<1>(x.value()));
-    md_ = std::to_string(std::get<2>(x.value()));
-  }
+  std::string gy_ = std::get<0>(gdate_);
+  std::string gm_ = std::to_string(std::get<1>(gdate_));
+  std::string gd_ = std::to_string(std::get<2>(gdate_));
+  std::string jy_ = std::get<0>(jdate_);
+  std::string jm_ = std::to_string(std::get<1>(jdate_));
+  std::string jd_ = std::to_string(std::get<2>(jdate_));
+  std::string my_ = std::get<0>(mdate_);
+  std::string mm_ = std::to_string(std::get<1>(mdate_));
+  std::string md_ = std::to_string(std::get<2>(mdate_));
   auto replacement = [this, &jy_, &gy_, &my_, &jm_, &gm_, &mm_, &jd_, &gd_, &md_](const std::string& c)->std::string{
     if(c=="%%")      { return "%"; }
     else if(c=="JY") { return jy_; }
@@ -1030,7 +1015,20 @@ std::string& Date::impl::format(std::string& fmt) const
 
 /*static*/bool Date::check(const Year& y, const Month m, const Day d, const CalendarFormat fmt)
 {
-  return Date::impl::check(y, m, d, fmt);
+  try
+  {
+    auto p = std::make_unique<Date::impl>(y, m, d, fmt) ;
+  }
+  catch(const std::exception& e)
+  {
+    return false;
+  }
+  return true;
+}
+
+/*static*/bool Date::check(const unsigned long long y, const Month m, const Day d, const CalendarFormat fmt)
+{
+  return check(std::to_string(y), m, d, fmt);
 }
 
 Date::Date()
@@ -1043,19 +1041,20 @@ Date::Date(const Year& y, const Month m, const Day d, const CalendarFormat fmt)
 {
 }
 
-Date::Date(const std::string& cjdn)
-  : pimpl(std::make_unique<Date::impl>(cjdn))
+Date::Date(const unsigned long long y, const Month m, const Day d, const CalendarFormat fmt)
+  : Date(std::to_string(y), m, d, fmt)
 {
 }
 
 Date::Date(const Date& other)
-  : pimpl(std::make_unique<Date::impl>(other.cjdn()))
+  : pimpl(std::make_unique<Date::impl>())
 {
+  *pimpl = *other.pimpl ;
 }
 
 Date& Date::operator=(const Date& other)
 {
-  pimpl->reset(other.cjdn());
+  *pimpl = *other.pimpl ;
   return *this;
 }
 
@@ -1144,29 +1143,45 @@ std::tuple<Year,Month,Day> Date::ymd(const CalendarFormat fmt) const
   return pimpl->ymd(fmt);
 }
 
-std::string Date::cjdn() const
-{
-  return pimpl->cjdn();
-}
-
 Date Date::inc_by_days(unsigned long long c) const
 {
-  return Date(pimpl->cjdn_from_incremented_by(c));
+  try
+  {
+    auto new_pimpl = std::make_unique<Date::impl>(pimpl->cjdn_from_incremented_by(c)) ;
+    Date result;
+    result.pimpl.swap(new_pimpl);
+    return result;
+  }
+  catch(const std::exception& e)
+  {
+    return {};
+  }
 }
 
 Date Date::dec_by_days(unsigned long long c) const
 {
-  Date r (pimpl->cjdn_from_decremented_by(c));
-  if(auto [y, m, d] = r.ymd(Julian); !check(y, m, d, Julian)) return {};
-  if(auto [y, m, d] = r.ymd(Grigorian); !check(y, m, d, Grigorian)) return {};
-  if(auto [y, m, d] = r.ymd(Milankovic); !check(y, m, d, Milankovic)) return {};
-  return r;
+  try
+  {
+    auto new_pimpl = std::make_unique<Date::impl>(pimpl->cjdn_from_decremented_by(c)) ;
+    Date result;
+    result.pimpl.swap(new_pimpl);
+    return result;
+  }
+  catch(const std::exception& e)
+  {
+    return {};
+  }
 }
 
-Date& Date::reset(const Year& y, const Month m, const Day d, const CalendarFormat fmt)
+bool Date::reset(const Year& y, const Month m, const Day d, const CalendarFormat fmt)
 {
-  pimpl->reset(y, m, d, fmt);
-  return *this;
+  if(pimpl->reset(y, m, d, fmt)) return true;
+  else return false;
+}
+
+bool Date::reset(const unsigned long long y, const Month m, const Day d, const CalendarFormat fmt)
+{
+  return reset(std::to_string(y), m, d, fmt);
 }
 
 std::string Date::format(std::string fmt) const

@@ -84,9 +84,9 @@ std::string property_title(oxc_const property);
 /**
  * Класс даты. Реализует преобразования между 3-мя календарными системами (григорианский, юлианский, ново-юлианский)
  * по методу Dr. Louis Strous'a - https://aa.quae.nl/en/reken/juliaansedag.html
- * Для числа года используется строковое представление. Любой метод принимающий число года,
+ * Для числа года используется строковое представление. Конструктор принимающий строковое число года,
  * бросает исключение если строку невозможно преобразовать в целое число произвольной величины
- * или если число < MIN_YEAR_VALUE.
+ * или если число (во всех календарных форматах) < MIN_YEAR_VALUE.
  */
 class Date {
   class impl;
@@ -127,6 +127,10 @@ public:
    */
   static bool check(const Year& y, const Month m, const Day d, const CalendarFormat fmt=Julian);
   /**
+   *   Перегруженная версия. Отличается только типом параметров.
+   */
+  static bool check(const unsigned long long y, const Month m, const Day d, const CalendarFormat fmt=Julian);
+  /**
     *  Конструктор
     */
   Date();
@@ -142,9 +146,12 @@ public:
   /**
     *  Конструктор
     *
-    *  \param [in] cjdn значение Chronological Julian Day Number
+    *  \param [in] y число года
+    *  \param [in] m число месяца
+    *  \param [in] d число дня
+    *  \param [in] fmt тип календаря для вх. даты
     */
-  Date(const std::string& cjdn);
+  Date(const unsigned long long y, const Month m, const Day d, const CalendarFormat fmt=Julian);
   Date(const Date&);
   Date& operator=(const Date&);
   Date(Date&&);
@@ -194,10 +201,6 @@ public:
     */
   std::tuple<Year, Month, Day> ymd(const CalendarFormat fmt=Julian) const;
   /**
-    *  Извлекает значение CjDN (Chronological Julian Day Number) для даты.
-    */
-  std::string cjdn() const;
-  /**
     *  Возвращает новую дату, увеличенную на кол-во дней от текущей
     *
     *  \param [in] c кол-во дней
@@ -217,7 +220,11 @@ public:
     *  \param [in] d число дня
     *  \param [in] fmt тип календаря для вх. даты
     */
-  Date& reset(const Year& y, const Month m, const Day d, const CalendarFormat fmt=Julian);
+  bool reset(const Year& y, const Month m, const Day d, const CalendarFormat fmt=Julian);
+  /**
+   *   Перегруженная версия. Отличается только типом параметров.
+   */
+  bool reset(const unsigned long long y, const Month m, const Day d, const CalendarFormat fmt=Julian);
   /**
    *  Return string representation of the stored date.<br>
    *  The optional parameter may contain the following format specifiers:<br><ul>
