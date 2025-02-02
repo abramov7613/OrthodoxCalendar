@@ -4411,7 +4411,7 @@ std::vector<Date> OrthodoxCalendar::impl::get_alldates_inperiod_withanyof(const 
 std::string OrthodoxCalendar::impl::get_description_for_date(const Date& d, std::string& datefmt) const
 {
   if(!d) return {};
-  std::string buf;
+  std::string result, buf;
   auto p = date_properties(d);
   for(const auto i: p) if(i < 3001) buf += property_title(i) + ' ';
   if(auto x = std::find(p.begin(), p.end(), oxc::post_petr); x!=p.end())
@@ -4420,15 +4420,22 @@ std::string OrthodoxCalendar::impl::get_description_for_date(const Date& d, std:
         buf += property_title(oxc::post_usp) + ". ";
   if(auto x = std::find(p.begin(), p.end(), oxc::post_rojd); x!=p.end())
         buf += property_title(oxc::post_rojd) + ". ";
-  return d.format(datefmt) + ' ' + buf;
+  result = d.format(datefmt) + ' ' + buf;
+  while(!result.empty() && result.front()==' ') result.erase(result.begin());
+  while(!result.empty() && result.back()==' ') result.pop_back();
+  return result;
 }
 
 std::string OrthodoxCalendar::impl::get_description_for_dates(std::span<const Date> days, std::string& datefmt,
       const std::string& separator) const
 {
   std::string res;
-  for(const auto& e: days) if(auto s = get_description_for_date(e, datefmt); !s.empty()) res += s + separator;
-  if(res.size() > separator.size()) res = res.substr(0, res.size() - separator.size());
+  for(auto it=days.begin(); it!=days.end(); ++it){
+    if(auto s = get_description_for_date(*it, datefmt); !s.empty()){
+      if(it!=days.begin()) res += separator;
+      res += s;
+    }
+  }
   return res;
 }
 
