@@ -373,6 +373,7 @@ std::string property_title(oxc_const property)
     {ned_porojdestve_r       ,"Чтения недели по Рождестве Христовом."},
     {sub_peredbogoyav_r      ,"Чтения субботы пред Богоявлением."},
     {ned_peredbogoyav_r      ,"Чтения недели пред Богоявлением."},
+    {ned_prav_bogootec       ,"Правв. Иосифа Обручника, Давида царя и Иакова, брата Господня."},
   //таблица - группа констант 4 - типы праздников
     { dvana10_per_prazd,       "Двунадесятые переходящие праздники"},
     { dvana10_nep_prazd,       "Двунадесятые непереходящие праздники"},
@@ -3131,8 +3132,8 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
     default: { dd = make_pair(12,26); }
   };
   switch(get_dn_(dd)) {
-    case 0: { add_marker_for_date_(dd, ned_porojdestve); } break;
-    default: { add_marker_for_date_(dd, ned_porojdestve_r); }
+    case 0:  { add_markers_for_date_(dd, {ned_porojdestve, ned_prav_bogootec}); } break;
+    default: { add_markers_for_date_(dd, {ned_porojdestve_r, ned_prav_bogootec}); }
   };
   // Суббота пред Богоявлением (типикон стр.380)
   if(i==0 || i==1) {

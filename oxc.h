@@ -885,6 +885,7 @@ oxc_const sub_porojdestve_r      = 2027;///< Чтения субботы по Р
 oxc_const ned_porojdestve_r      = 2028;///< Чтения недели по Рождестве Христовом.
 oxc_const sub_peredbogoyav_r     = 2029;///< Чтения субботы пред Богоявлением.
 oxc_const ned_peredbogoyav_r     = 2030;///< Чтения недели пред Богоявлением.
+oxc_const ned_prav_bogootec      = 2031;///< Правв. Иосифа Обручника, Давида царя и Иакова, брата Господня.
 /** @} */
 
 /**
