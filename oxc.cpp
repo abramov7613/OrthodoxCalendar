@@ -153,7 +153,7 @@ std::string property_title(oxc_const property)
     {s2popashe_4,        "Четверг 2-й седмицы по Пасхе."},
     {s2popashe_5,        "Пятница 2-й седмицы по Пасхе."},
     {s2popashe_6,        "Суббота 2-й седмицы по Пасхе."},
-    {ned3_popashe,       "Неделя 3-я по Пасхе, святых жен-мироносиц."},
+    {ned3_popashe,       "Неделя 3-я по Пасхе, святых жен-мироносиц: Марии Магдалины, Марии Клеоповой, Саломии, Иоанны, Марфы и Марии, Сусанны и иных."},
     {s3popashe_1,        "Понедельник 3-й седмицы по Пасхе."},
     {s3popashe_2,        "Вторник 3-й седмицы по Пасхе."},
     {s3popashe_3,        "Среда 3-й седмицы по Пасхе."},
@@ -374,6 +374,7 @@ std::string property_title(oxc_const property)
     {sub_peredbogoyav_r      ,"Чтения субботы пред Богоявлением."},
     {ned_peredbogoyav_r      ,"Чтения недели пред Богоявлением."},
     {ned_prav_bogootec       ,"Правв. Иосифа Обручника, Давида царя и Иакова, брата Господня."},
+    {sobor_vsehsv_rus        ,"Всех святых, в земле Русской просиявших."},
   //таблица - группа констант 4 - типы праздников
     { dvana10_per_prazd,       "Двунадесятые переходящие праздники"},
     { dvana10_nep_prazd,       "Двунадесятые непереходящие праздники"},
@@ -1032,47 +1033,35 @@ std::string& Date::impl::format(std::string& fmt) const
   return check(std::to_string(y), m, d, fmt);
 }
 
-Date::Date()
-  : pimpl(std::make_unique<Date::impl>())
+Date::Date() : pimpl(new Date::impl())
 {
 }
 
 Date::Date(const Year& y, const Month m, const Day d, const CalendarFormat fmt)
-  : pimpl(std::make_unique<Date::impl>(y, m, d, fmt))
+  : pimpl(new Date::impl(y, m, d, fmt))
 {
 }
 
 Date::Date(const unsigned long long y, const Month m, const Day d, const CalendarFormat fmt)
-  : Date(std::to_string(y), m, d, fmt)
+  : pimpl(new Date::impl(std::to_string(y), m, d, fmt))
 {
 }
 
-Date::Date(const Date& other)
-  : pimpl(std::make_unique<Date::impl>())
+Date::Date(const Date& other) : pimpl(new Date::impl(*other.pimpl))
 {
-  *pimpl = *other.pimpl ;
 }
 
 Date& Date::operator=(const Date& other)
 {
-  *pimpl = *other.pimpl ;
+  if(this != &other) pimpl.reset(new Date::impl(*other.pimpl));
   return *this;
 }
 
-Date::Date(Date&& other)
-{
-  pimpl.swap(other.pimpl);
-}
+Date::Date(Date&&) noexcept = default ;
 
-Date& Date::operator=(Date&& other)
-{
-  pimpl.swap(other.pimpl);
-  return *this;
-}
+Date& Date::operator=(Date&&) noexcept = default ;
 
-Date::~Date()
-{
-}
+Date::~Date() = default;
 
 bool Date::operator==(const Date& rhs) const
 {
@@ -2564,7 +2553,7 @@ OrthYear::OrthYear(const std::string& year, std::span<const uint8_t> il, bool os
   add_markers_for_date_(dd, {varlaam_hut, mari_icon_08, mari_icon_21});
   //всех святых, в земле Русской просиявших
   dd = increment_date_(dd, 2, b);
-  add_markers_for_date_(dd, {ned2_po50, sobor_afonpr});
+  add_markers_for_date_(dd, {ned2_po50, sobor_vsehsv_rus, sobor_afonpr});
   //Собор Белорусских, Вологодских, Новгородских, Псковских , Петербургских, Удмуртских, Волгоградских святых
   dd = increment_date_(dd, 7, b);
   add_markers_for_date_(dd, {ned3_po50, sobor_belorus, sobor_vologod,
@@ -4444,33 +4433,23 @@ std::string OrthodoxCalendar::impl::get_description_for_dates(std::span<const Da
 /*          class OrthodoxCalendar              */
 /*----------------------------------------------*/
 
-OrthodoxCalendar::OrthodoxCalendar() : pimpl(std::make_unique<impl>())
+OrthodoxCalendar::OrthodoxCalendar() : pimpl(new OrthodoxCalendar::impl())
 {
 }
 
-OrthodoxCalendar::~OrthodoxCalendar()
-{
-}
+OrthodoxCalendar::~OrthodoxCalendar() = default	;
 
-OrthodoxCalendar::OrthodoxCalendar(OrthodoxCalendar&& other)
-{
-  pimpl.swap(other.pimpl);
-}
+OrthodoxCalendar::OrthodoxCalendar(OrthodoxCalendar&&) noexcept = default;
 
-OrthodoxCalendar& OrthodoxCalendar::operator=(OrthodoxCalendar&& other)
-{
-  pimpl.swap(other.pimpl);
-  return *this;
-}
+OrthodoxCalendar& OrthodoxCalendar::operator=(OrthodoxCalendar&&) noexcept = default;
 
-OrthodoxCalendar::OrthodoxCalendar(const OrthodoxCalendar& other) : pimpl(std::make_unique<impl>())
+OrthodoxCalendar::OrthodoxCalendar(const OrthodoxCalendar& other) : pimpl(new OrthodoxCalendar::impl(*other.pimpl))
 {
-  *pimpl = *other.pimpl;
 }
 
 OrthodoxCalendar& OrthodoxCalendar::operator=(const OrthodoxCalendar& other)
 {
-  *pimpl = *other.pimpl;
+  if(this != &other) pimpl.reset(new OrthodoxCalendar::impl(*other.pimpl));
   return *this;
 }
 

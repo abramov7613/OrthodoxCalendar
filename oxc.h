@@ -154,8 +154,8 @@ public:
   Date(const unsigned long long y, const Month m, const Day d, const CalendarFormat fmt=Julian);
   Date(const Date&);
   Date& operator=(const Date&);
-  Date(Date&&);
-  Date& operator=(Date&&);
+  Date(Date&&) noexcept;
+  Date& operator=(Date&&) noexcept;
   virtual ~Date();
   bool operator==(const Date&) const;
   bool operator!=(const Date&) const;
@@ -312,8 +312,8 @@ public:
   OrthodoxCalendar();
   OrthodoxCalendar(const OrthodoxCalendar&);
   OrthodoxCalendar& operator=(const OrthodoxCalendar&);
-  OrthodoxCalendar(OrthodoxCalendar&&);
-  OrthodoxCalendar& operator=(OrthodoxCalendar&&);
+  OrthodoxCalendar(OrthodoxCalendar&&) noexcept;
+  OrthodoxCalendar& operator=(OrthodoxCalendar&&) noexcept;
   virtual ~OrthodoxCalendar();
   /**
    *  Метод вычисляет дату православной пасхи по ст. ст.
@@ -696,7 +696,7 @@ oxc_const s1po50_4                = 54  ;///< Четверг Пятидесят�
 oxc_const s1po50_5                = 55  ;///< Пятница Пятидесятницы.
 oxc_const s1po50_6                = 56  ;///< Суббота Пятидесятницы. Отдание праздника Пятидесятницы.
 oxc_const ned1_po50               = 57  ;///< Неделя 1-я по Пятидесятнице, Всех святых.
-oxc_const ned2_po50               = 58  ;///< Неделя 2-я по Пятидесятнице, Всех святых, в земле Русской просиявших.
+oxc_const ned2_po50               = 58  ;///< Неделя 2-я по Пятидесятнице.
 oxc_const ned3_po50               = 59  ;///< Неделя 3-я по Пятидесятнице.
 oxc_const ned4_po50               = 60  ;///< Неделя 4-я по Пятидесятнице.
 oxc_const sub_pered14sent         = 61  ;///< Суббота пред Воздвижением.
@@ -886,6 +886,7 @@ oxc_const ned_porojdestve_r      = 2028;///< Чтения недели по Ро
 oxc_const sub_peredbogoyav_r     = 2029;///< Чтения субботы пред Богоявлением.
 oxc_const ned_peredbogoyav_r     = 2030;///< Чтения недели пред Богоявлением.
 oxc_const ned_prav_bogootec      = 2031;///< Правв. Иосифа Обручника, Давида царя и Иакова, брата Господня.
+oxc_const sobor_vsehsv_rus       = 2032;///< Всех святых, в земле Русской просиявших.
 /** @} */
 
 /**
