@@ -3966,16 +3966,13 @@ std::optional<ShortDate> OrthYear::get_date_withallof(std::span<oxc_const> m) co
   if(m.empty()) return std::nullopt;
   auto semires = get_alldates_with(m.front());
   if(!semires) return std::nullopt;
-  std::vector<std::remove_cv_t<oxc_const>> v ;
-  std::copy(m.begin(), m.end(), std::back_inserter(v));
-  std::sort(v.begin(), v.end());
   for(auto [month, day] : *semires) {
-    if(auto fr = find_in_data1(month, day); fr) {
-      auto begin = fr.value()->day_markers.begin();
-      auto end = fr.value()->day_markers.end();
-      auto sr = std::search(begin, end, v.begin(), v.end());
-      if(sr != end) return ShortDate{month, day};
-    }
+    const bool b = std::all_of(m.begin(), m.end(), [this, month, day](auto x){
+      auto fr = find_in_data1(month, day);
+      return std::any_of(fr.value()->day_markers.begin(), fr.value()->day_markers.end(),
+                          [x](auto y){ return y==x; });
+    });
+    if(b) return ShortDate{month, day};
   }
   return std::nullopt;
 }
